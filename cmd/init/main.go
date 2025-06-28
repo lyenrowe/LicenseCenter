@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/licensecenter/licensecenter/internal/config"
-	"github.com/licensecenter/licensecenter/internal/database"
-	"github.com/licensecenter/licensecenter/internal/services"
-	"github.com/licensecenter/licensecenter/pkg/logger"
+	"github.com/lyenrowe/LicenseCenter/internal/config"
+	"github.com/lyenrowe/LicenseCenter/internal/database"
+	"github.com/lyenrowe/LicenseCenter/internal/services"
+	"github.com/lyenrowe/LicenseCenter/pkg/logger"
 )
 
 func main() {

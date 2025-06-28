@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/licensecenter/licensecenter/internal/config"
-	"github.com/licensecenter/licensecenter/internal/models"
+	"github.com/lyenrowe/LicenseCenter/internal/config"
+	"github.com/lyenrowe/LicenseCenter/internal/models"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"

@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/licensecenter/licensecenter/pkg/utils"
+	"github.com/lyenrowe/LicenseCenter/pkg/utils"
 )
 
 // BindFile 绑定请求文件结构

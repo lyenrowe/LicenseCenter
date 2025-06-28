@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/licensecenter/licensecenter/pkg/auth"
+	"github.com/lyenrowe/LicenseCenter/pkg/auth"
 )
 
 // JWTAuthMiddleware JWT认证中间件

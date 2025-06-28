@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/licensecenter/licensecenter/internal/database"
-	"github.com/licensecenter/licensecenter/internal/models"
-	"github.com/licensecenter/licensecenter/pkg/crypto"
-	"github.com/licensecenter/licensecenter/pkg/errors"
-	"github.com/licensecenter/licensecenter/pkg/utils"
+	"github.com/lyenrowe/LicenseCenter/internal/database"
+	"github.com/lyenrowe/LicenseCenter/internal/models"
+	"github.com/lyenrowe/LicenseCenter/pkg/crypto"
+	"github.com/lyenrowe/LicenseCenter/pkg/errors"
+	"github.com/lyenrowe/LicenseCenter/pkg/utils"
 	"gorm.io/gorm"
 )
 

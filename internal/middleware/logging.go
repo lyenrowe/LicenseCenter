@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/licensecenter/licensecenter/internal/services"
+	"github.com/lyenrowe/LicenseCenter/internal/services"
 	"go.uber.org/zap"
 )
 

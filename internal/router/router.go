@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/licensecenter/licensecenter/internal/handlers"
-	"github.com/licensecenter/licensecenter/internal/middleware"
-	"github.com/licensecenter/licensecenter/pkg/logger"
+	"github.com/lyenrowe/LicenseCenter/internal/handlers"
+	"github.com/lyenrowe/LicenseCenter/internal/middleware"
+	"github.com/lyenrowe/LicenseCenter/pkg/logger"
 )
 
 // SetupRouter 设置路由

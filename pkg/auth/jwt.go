@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/licensecenter/licensecenter/internal/config"
+	"github.com/lyenrowe/LicenseCenter/internal/config"
 )
 
 // Claims JWT声明结构

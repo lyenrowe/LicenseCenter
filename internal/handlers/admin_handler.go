@@ -6,9 +6,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/licensecenter/licensecenter/internal/services"
-	"github.com/licensecenter/licensecenter/pkg/auth"
-	"github.com/licensecenter/licensecenter/pkg/errors"
+	"github.com/lyenrowe/LicenseCenter/internal/services"
+	"github.com/lyenrowe/LicenseCenter/pkg/auth"
+	"github.com/lyenrowe/LicenseCenter/pkg/errors"
 )
 
 // AdminHandler 管理员处理器

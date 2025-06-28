@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/licensecenter/licensecenter/internal/database"
-	"github.com/licensecenter/licensecenter/internal/models"
-	"github.com/licensecenter/licensecenter/pkg/errors"
+	"github.com/lyenrowe/LicenseCenter/internal/database"
+	"github.com/lyenrowe/LicenseCenter/internal/models"
+	"github.com/lyenrowe/LicenseCenter/pkg/errors"
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"

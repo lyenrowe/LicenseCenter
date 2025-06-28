@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/licensecenter/licensecenter/internal/config"
-	"github.com/licensecenter/licensecenter/internal/database"
-	"github.com/licensecenter/licensecenter/internal/router"
-	"github.com/licensecenter/licensecenter/internal/services"
-	"github.com/licensecenter/licensecenter/pkg/logger"
+	"github.com/lyenrowe/LicenseCenter/internal/config"
+	"github.com/lyenrowe/LicenseCenter/internal/database"
+	"github.com/lyenrowe/LicenseCenter/internal/router"
+	"github.com/lyenrowe/LicenseCenter/internal/services"
+	"github.com/lyenrowe/LicenseCenter/pkg/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )

@@ -1,4 +1,4 @@
-module github.com/licensecenter/licensecenter
+module github.com/lyenrowe/LicenseCenter
 
 go 1.21
 

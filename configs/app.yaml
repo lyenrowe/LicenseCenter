@@ -1,0 +1,35 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  mode: "debug" # debug, release, test
+  
+database:
+  driver: "sqlite" # sqlite, mysql, postgres
+  dsn: "./data/license.db"
+  max_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: 3600 # seconds
+
+security:
+  jwt_secret: "your-jwt-secret-key-change-in-production"
+  session_timeout: 3600 # seconds (1 hour for customer)
+  admin_session_timeout: 1800 # seconds (30 minutes for admin)
+  rsa_key_size: 2048
+
+captcha:
+  enabled: true
+  site_key: "your-hcaptcha-site-key"
+  secret_key: "your-hcaptcha-secret-key"
+
+logging:
+  level: "info" # debug, info, warn, error
+  file: "./logs/app.log"
+  max_size: 100 # MB
+  max_backups: 3
+  max_age: 30 # days
+
+system:
+  max_bind_files_per_request: 10
+  backup_retention_days: 30
+  data_dir: "./data"
+  upload_dir: "./uploads" 

@@ -33,7 +33,20 @@ func SetupRouter() *gin.Engine {
 		zap.String("gin_mode", ginMode))
 
 	// 全局中间件
-	r.Use(gin.Recovery())
+	r.Use(gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+		// 记录panic详情
+		logger.GetLogger().Error("HTTP请求发生panic",
+			zap.Any("panic", recovered),
+			zap.String("method", c.Request.Method),
+			zap.String("path", c.Request.URL.Path),
+			zap.String("client_ip", c.ClientIP()),
+			zap.String("user_agent", c.Request.UserAgent()))
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "服务器内部错误",
+			"code":  50000,
+		})
+	}))
 	r.Use(middleware.LoggingMiddleware(logger.GetLogger()))
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")

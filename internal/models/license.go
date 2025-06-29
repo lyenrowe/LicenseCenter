@@ -26,7 +26,7 @@ type License struct {
 
 // TableName 指定表名
 func (License) TableName() string {
-	return "activated_licenses"
+	return "licenses"
 }
 
 // LicenseStatus 授权状态常量

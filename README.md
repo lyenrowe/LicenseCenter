@@ -198,7 +198,7 @@ make init-system
 主要数据表：
 
 - `authorizations` - 授权码管理
-- `activated_licenses` - 已激活设备
+- `licenses` - 已激活设备
 - `admin_users` - 管理员账户
 - `admin_logs` - 操作日志
 - `rsa_keys` - RSA密钥管理

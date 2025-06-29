@@ -111,13 +111,13 @@ func (d *Database) CreateIndexes() error {
 	}
 
 	// 激活设备表索引
-	if err := d.DB.Exec("CREATE INDEX IF NOT EXISTS idx_licenses_auth_id ON activated_licenses(authorization_id)").Error; err != nil {
+	if err := d.DB.Exec("CREATE INDEX IF NOT EXISTS idx_licenses_auth_id ON licenses(authorization_id)").Error; err != nil {
 		return err
 	}
-	if err := d.DB.Exec("CREATE INDEX IF NOT EXISTS idx_licenses_machine_id ON activated_licenses(machine_id)").Error; err != nil {
+	if err := d.DB.Exec("CREATE INDEX IF NOT EXISTS idx_licenses_machine_id ON licenses(machine_id)").Error; err != nil {
 		return err
 	}
-	if err := d.DB.Exec("CREATE INDEX IF NOT EXISTS idx_licenses_status ON activated_licenses(status)").Error; err != nil {
+	if err := d.DB.Exec("CREATE INDEX IF NOT EXISTS idx_licenses_status ON licenses(status)").Error; err != nil {
 		return err
 	}
 

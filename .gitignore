@@ -2,3 +2,4 @@ data/
 logs/
 uploads/
 web/node_modules/
+bin/

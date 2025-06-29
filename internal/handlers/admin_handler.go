@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/lyenrowe/LicenseCenter/internal/services"
 	"github.com/lyenrowe/LicenseCenter/pkg/auth"
 	"github.com/lyenrowe/LicenseCenter/pkg/errors"
+	"github.com/lyenrowe/LicenseCenter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // AdminHandler 管理员处理器
@@ -126,6 +129,15 @@ func (h *AdminHandler) Logout(c *gin.Context) {
 func (h *AdminHandler) GetDashboard(c *gin.Context) {
 	stats, err := h.adminService.GetDashboardStats()
 	if err != nil {
+		// 记录详细的错误信息
+		userID, _ := c.Get("user_id")
+		username, _ := c.Get("username")
+		logger.GetLogger().Error("获取控制台统计信息失败",
+			zap.Error(err),
+			zap.String("method", "GetDashboard"),
+			zap.String("user_id", fmt.Sprintf("%v", userID)),
+			zap.String("username", fmt.Sprintf("%v", username)))
+
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "获取统计信息失败",
 			"code":  50000,

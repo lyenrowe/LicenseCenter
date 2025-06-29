@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +12,9 @@ import (
 	"github.com/lyenrowe/LicenseCenter/pkg/errors"
 	"gorm.io/gorm"
 )
+
+// 全局计数器，用于确保授权码唯一性
+var authCodeCounter int64
 
 // AuthorizationService 授权码管理服务
 type AuthorizationService struct {
@@ -252,17 +256,32 @@ func (s *AuthorizationService) DeleteAuthorization(id uint) error {
 
 // generateAuthorizationCode 生成授权码
 func (s *AuthorizationService) generateAuthorizationCode() string {
-	// 生成格式：ABC-DEF-GHI 的授权码
+	// 生成20位授权码，格式：ABCD-EFGH-IJKL-MNOP-QRST（4个字符一组，分成5组）
+	// 使用UUID + 原子计数器 + 时间戳确保唯一性
+
+	// 原子递增计数器
+	counter := atomic.AddInt64(&authCodeCounter, 1)
+
+	// 获取当前时间戳（纳秒）
+	timestamp := time.Now().UnixNano()
+
+	// 生成UUID
 	id := uuid.New().String()
-	parts := strings.Split(id, "-")
+	// 移除UUID中的连字符，只保留字母和数字
+	cleanID := strings.ReplaceAll(id, "-", "")
 
-	// 取前3段，转为大写
-	code := fmt.Sprintf("%s-%s-%s",
-		strings.ToUpper(parts[0][:3]),
-		strings.ToUpper(parts[1][:3]),
-		strings.ToUpper(parts[2][:3]))
+	// 组合: UUID前12位 + 4位计数器 + 4位时间戳
+	counterHex := fmt.Sprintf("%04X", counter&0xFFFF)
+	timestampHex := fmt.Sprintf("%04X", timestamp&0xFFFF)
+	code := strings.ToUpper(cleanID[:12] + counterHex + timestampHex)
 
-	return code
+	// 格式化为 XXXX-XXXX-XXXX-XXXX-XXXX 格式（20位字符，每段4位，共5段）
+	return fmt.Sprintf("%s-%s-%s-%s-%s",
+		code[0:4],
+		code[4:8],
+		code[8:12],
+		code[12:16],
+		code[16:20])
 }
 
 // GetStatistics 获取授权码统计信息

@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lyenrowe/LicenseCenter/internal/config"
@@ -315,6 +316,45 @@ func (suite *AuthorizationServiceTestSuite) TestGetStatistics() {
 	assert.Equal(suite.T(), int64(1), stats["active_authorizations"])
 	assert.Equal(suite.T(), int64(10), stats["total_seats"])
 	assert.Equal(suite.T(), int64(3), stats["used_seats"])
+}
+
+func (suite *AuthorizationServiceTestSuite) TestGenerateAuthorizationCode() {
+	// 直接测试授权码生成函数，参照简单测试文件的方式
+	codes := make(map[string]bool)
+
+	// 直接调用授权码生成方法（需要通过反射或者创建一个临时的service实例）
+	service := services.NewAuthorizationService()
+
+	for i := 0; i < 20; i++ {
+		// 由于generateAuthorizationCode是私有方法，我们通过CreateAuthorization来测试
+		// 但是每次都使用不同的客户名来避免可能的缓存问题
+		req := &services.CreateAuthorizationRequest{
+			CustomerName: fmt.Sprintf("测试客户_%d", i),
+			MaxSeats:     5,
+		}
+
+		auth, err := service.CreateAuthorization(req)
+		assert.NoError(suite.T(), err)
+
+		code := auth.AuthorizationCode
+		fmt.Printf("生成的授权码 %d: %s\n", i+1, code)
+
+		// 验证格式：应该是 XXXX-XXXX-XXXX-XXXX-XXXX 格式，总长度24位（包括连字符）
+		assert.Len(suite.T(), code, 24, "授权码长度应该是24位")
+		assert.Regexp(suite.T(), `^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$`, code, "授权码格式不正确")
+
+		// 验证唯一性
+		if codes[code] {
+			fmt.Printf("发现重复授权码: %s\n", code)
+		}
+		assert.False(suite.T(), codes[code], fmt.Sprintf("授权码应该是唯一的，但发现重复: %s", code))
+		codes[code] = true
+
+		// 清理，避免重复
+		database.GetDB().Exec("DELETE FROM authorizations WHERE id = ?", auth.ID)
+	}
+
+	fmt.Printf("生成了 %d 个唯一授权码\n", len(codes))
 }
 
 // 运行测试套件

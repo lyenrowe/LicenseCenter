@@ -236,6 +236,64 @@ func (h *AuthorizationHandler) DeleteAuthorization(c *gin.Context) {
 	})
 }
 
+// GetAuthorizationDetails 获取授权码详情（包含设备列表）
+func (h *AuthorizationHandler) GetAuthorizationDetails(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "无效的授权码ID",
+			"code":  40000,
+		})
+		return
+	}
+
+	auth, err := h.authService.GetAuthorizationByID(uint(id))
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			c.JSON(appErr.HTTPStatus(), gin.H{
+				"error": appErr.Message,
+				"code":  appErr.Code,
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "获取授权码失败",
+				"code":  50000,
+			})
+		}
+		return
+	}
+
+	// 格式化设备列表数据
+	devices := make([]gin.H, 0, len(auth.Licenses))
+	for _, license := range auth.Licenses {
+		devices = append(devices, gin.H{
+			"id":           license.ID,
+			"hostname":     license.Hostname,
+			"machine_id":   license.MachineID,
+			"activated_at": license.ActivatedAt,
+			"expires_at":   license.ExpiresAt,
+			"status":       license.Status,
+			"unbound_at":   license.UnboundAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"id":                 auth.ID,
+			"customer_name":      auth.CustomerName,
+			"authorization_code": auth.AuthorizationCode,
+			"max_seats":          auth.MaxSeats,
+			"used_seats":         auth.UsedSeats,
+			"duration_years":     auth.DurationYears,
+			"latest_expiry_date": auth.LatestExpiryDate,
+			"status":             auth.Status,
+			"created_at":         auth.CreatedAt,
+			"updated_at":         auth.UpdatedAt,
+			"devices":            devices,
+		},
+	})
+}
+
 // GetStatistics 获取授权码统计信息
 func (h *AuthorizationHandler) GetStatistics(c *gin.Context) {
 	stats, err := h.authService.GetStatistics()

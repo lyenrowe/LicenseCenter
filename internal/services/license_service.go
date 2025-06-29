@@ -212,30 +212,43 @@ func (s *LicenseService) TransferLicense(authCode string, unbindFile UnbindFile,
 
 // ForceUnbindLicense 管理员强制解绑设备
 func (s *LicenseService) ForceUnbindLicense(licenseID uint, reason string) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		var license models.License
-		err := tx.First(&license, licenseID).Error
+	// 先获取许可证信息（不在事务中）
+	var license models.License
+	err := s.db.First(&license, licenseID).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return errors.ErrLicenseNotFound
+		}
+		return errors.WrapError(err, 50001, "获取授权记录失败")
+	}
+
+	if !license.CanUnbind() {
+		return errors.NewAppError(41004, "授权状态不允许解绑")
+	}
+
+	// 使用事务更新许可证状态
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// 重新获取许可证以确保数据一致性
+		var currentLicense models.License
+		err := tx.First(&currentLicense, licenseID).Error
 		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return errors.ErrLicenseNotFound
-			}
 			return errors.WrapError(err, 50001, "获取授权记录失败")
 		}
 
-		if !license.CanUnbind() {
+		if !currentLicense.CanUnbind() {
 			return errors.NewAppError(41004, "授权状态不允许解绑")
 		}
 
 		// 标记为强制解绑
-		license.Unbind(true)
-		err = tx.Save(&license).Error
-		if err != nil {
-			return errors.WrapError(err, 50001, "更新授权状态失败")
-		}
-
-		// 释放席位
-		return s.authService.ReleaseSeats(license.AuthorizationID, 1)
+		currentLicense.Unbind(true)
+		return tx.Save(&currentLicense).Error
 	})
+	if err != nil {
+		return errors.WrapError(err, 50001, "更新授权状态失败")
+	}
+
+	// 在事务外释放席位，避免长时间持有锁
+	return s.authService.ReleaseSeats(license.AuthorizationID, 1)
 }
 
 // GetLicensesByAuth 获取授权码下的所有设备

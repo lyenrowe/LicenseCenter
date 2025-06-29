@@ -35,14 +35,14 @@
     <!-- 授权码列表 -->
     <el-card>
       <el-table :data="authorizations" v-loading="loading" stripe>
-        <el-table-column prop="authorization_code" label="授权码" width="200" />
+        <el-table-column prop="authorization_code" label="授权码" width="240" />
         <el-table-column prop="customer_name" label="客户名称" />
         <el-table-column label="席位使用" width="120">
           <template #default="scope">
             {{ scope.row.used_seats }} / {{ scope.row.max_seats }}
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="180" />
+        <el-table-column prop="created_at" label="创建时间" width="300" />
         <el-table-column label="状态" width="100">
           <template #default="scope">
             <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'">
@@ -268,6 +268,8 @@ onMounted(() => {
 <style scoped>
 .authorization-management {
   padding: 20px;
+  background: #f5f5f5;
+  min-height: 100vh;
 }
 
 .page-header {

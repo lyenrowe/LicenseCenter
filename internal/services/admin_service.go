@@ -404,6 +404,7 @@ func (s *AdminService) GetDashboardStats() (map[string]interface{}, error) {
 func getActionDescription(action string) string {
 	actionMap := map[string]string{
 		"login":                "管理员登录",
+		"logout":               "管理员登出",
 		"create_authorization": "创建授权码",
 		"update_authorization": "修改授权码",
 		"delete_authorization": "删除授权码",
@@ -413,6 +414,7 @@ func getActionDescription(action string) string {
 		"force_unbind":         "强制解绑设备",
 		"activate_license":     "设备激活",
 		"transfer_license":     "授权转移",
+		"force_unbind_license": "强制解绑设备",
 	}
 
 	if desc, ok := actionMap[action]; ok {

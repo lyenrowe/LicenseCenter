@@ -35,28 +35,32 @@ const routes = [
         meta: { requiresAuth: false }
       },
       {
-        path: 'dashboard',
-        name: 'AdminDashboard',
-        component: () => import('@/views/admin/Dashboard.vue'),
-        meta: { requiresAuth: true, role: 'admin' }
-      },
-      {
-        path: 'authorizations',
-        name: 'AuthorizationManagement',
-        component: () => import('@/views/admin/AuthorizationManagement.vue'),
-        meta: { requiresAuth: true, role: 'admin' }
-      },
-      {
-        path: 'customers',
-        name: 'CustomerManagement',
-        component: () => import('@/views/admin/CustomerManagement.vue'),
-        meta: { requiresAuth: true, role: 'admin' }
-      },
-      {
-        path: 'system',
-        name: 'SystemSettings',
-        component: () => import('@/views/admin/SystemSettings.vue'),
-        meta: { requiresAuth: true, role: 'admin' }
+        path: '',
+        component: () => import('@/views/admin/AdminLayout.vue'),
+        meta: { requiresAuth: true, role: 'admin' },
+        redirect: '/admin/dashboard',
+        children: [
+          {
+            path: 'dashboard',
+            name: 'AdminDashboard',
+            component: () => import('@/views/admin/Dashboard.vue')
+          },
+          {
+            path: 'authorizations',
+            name: 'AuthorizationManagement',
+            component: () => import('@/views/admin/AuthorizationManagement.vue')
+          },
+          {
+            path: 'customers',
+            name: 'CustomerManagement',
+            component: () => import('@/views/admin/CustomerManagement.vue')
+          },
+          {
+            path: 'system',
+            name: 'SystemSettings',
+            component: () => import('@/views/admin/SystemSettings.vue')
+          }
+        ]
       }
     ]
   },

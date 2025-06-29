@@ -217,8 +217,9 @@ func (suite *IntegrationTestSuite) testDeviceActivation(authCode string) string 
 	}
 
 	jsonData, _ := json.Marshal(activationData)
-	req, _ := http.NewRequest("POST", "/api/licenses/activate", bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("POST", "/api/license/activate", bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+suite.adminToken)
 
 	w := httptest.NewRecorder()
 	suite.app.ServeHTTP(w, req)
@@ -292,8 +293,9 @@ func (suite *IntegrationTestSuite) testInvalidAuthorizationActivation() {
 	}
 
 	jsonData, _ := json.Marshal(activationData)
-	req, _ := http.NewRequest("POST", "/api/licenses/activate", bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("POST", "/api/license/activate", bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+suite.adminToken)
 
 	w := httptest.NewRecorder()
 	suite.app.ServeHTTP(w, req)

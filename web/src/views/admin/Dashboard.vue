@@ -1,43 +1,5 @@
 <template>
-  <div class="admin-dashboard">
-    <!-- 侧边栏 -->
-    <div class="sidebar">
-      <div class="sidebar-header">
-        <h2>管理控制台</h2>
-      </div>
-      <el-menu
-        :default-active="activeMenu"
-        class="sidebar-menu"
-        @select="handleMenuSelect"
-      >
-        <el-menu-item index="dashboard">
-          <el-icon><Monitor /></el-icon>
-          <span>控制台</span>
-        </el-menu-item>
-        <el-menu-item index="authorizations">
-          <el-icon><Key /></el-icon>
-          <span>授权码管理</span>
-        </el-menu-item>
-        <el-menu-item index="customers">
-          <el-icon><User /></el-icon>
-          <span>客户管理</span>
-        </el-menu-item>
-        <el-menu-item index="system">
-          <el-icon><Setting /></el-icon>
-          <span>系统设置</span>
-        </el-menu-item>
-      </el-menu>
-      
-      <div class="sidebar-footer">
-        <el-button type="danger" @click="handleLogout" style="width: 100%;">
-          <el-icon><SwitchButton /></el-icon>
-          注销登录
-        </el-button>
-      </div>
-    </div>
-
-    <!-- 主内容区 -->
-    <div class="main-content">
+  <div class="dashboard-content">
       <!-- 头部 -->
       <div class="content-header">
         <h1>欢迎, {{ userInfo.username || '管理员' }}</h1>
@@ -146,7 +108,6 @@
         </el-table>
       </el-card>
     </div>
-  </div>
 </template>
 
 <script setup>
@@ -171,7 +132,6 @@ const dashboardData = ref({
   recent_activities: []
 })
 const currentTime = ref('')
-const activeMenu = ref('dashboard')
 const loading = ref(false)
 let timeInterval = null
 
@@ -200,13 +160,6 @@ const refreshData = () => {
   ElMessage.success('数据已刷新')
 }
 
-const handleMenuSelect = (index) => {
-  activeMenu.value = index
-  if (index !== 'dashboard') {
-    router.push(`/admin/${index}`)
-  }
-}
-
 const goToAuthorizations = () => {
   router.push('/admin/authorizations')
 }
@@ -217,11 +170,6 @@ const goToCustomers = () => {
 
 const goToSystem = () => {
   router.push('/admin/system')
-}
-
-const handleLogout = async () => {
-  await authStore.logoutAction()
-  router.push('/admin/login')
 }
 
 onMounted(() => {
@@ -238,60 +186,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.admin-dashboard {
-  display: flex;
-  height: 100vh;
+.dashboard-content {
+  padding: 20px;
   background: #f5f5f5;
-}
-
-.sidebar {
-  width: 250px;
-  background: #2c3e50;
-  color: white;
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-header {
-  padding: 20px;
-  text-align: center;
-  border-bottom: 1px solid #34495e;
-}
-
-.sidebar-header h2 {
-  margin: 0;
-  color: white;
-}
-
-.sidebar-menu {
-  flex: 1;
-  border: none;
-  background: transparent;
-}
-
-:deep(.el-menu-item) {
-  color: #bdc3c7;
-}
-
-:deep(.el-menu-item.is-active) {
-  background-color: #3498db;
-  color: white;
-}
-
-:deep(.el-menu-item:hover) {
-  background-color: #34495e;
-  color: white;
-}
-
-.sidebar-footer {
-  padding: 20px;
-  border-top: 1px solid #34495e;
-}
-
-.main-content {
-  flex: 1;
-  padding: 20px;
-  overflow-y: auto;
+  min-height: 100vh;
 }
 
 .content-header {

@@ -151,7 +151,7 @@ func (s *AuthorizationService) UpdateAuthorization(id uint, req *UpdateAuthoriza
 }
 
 // ListAuthorizations 获取授权码列表
-func (s *AuthorizationService) ListAuthorizations(page, limit int, search string, status *int) ([]models.Authorization, int64, error) {
+func (s *AuthorizationService) ListAuthorizations(page, limit int, search string, status *int) ([]map[string]interface{}, int64, error) {
 	var auths []models.Authorization
 	var total int64
 
@@ -181,7 +181,29 @@ func (s *AuthorizationService) ListAuthorizations(page, limit int, search string
 		return nil, 0, errors.WrapError(err, 50001, "获取授权码列表失败")
 	}
 
-	return auths, total, nil
+	// 为每个授权码查询活跃设备数量
+	result := make([]map[string]interface{}, len(auths))
+	for i, auth := range auths {
+		var activeDevices int64
+		s.db.Model(&models.License{}).Where("authorization_id = ? AND status = ?",
+			auth.ID, models.LicenseStatusActive).Count(&activeDevices)
+
+		result[i] = map[string]interface{}{
+			"id":                 auth.ID,
+			"customer_name":      auth.CustomerName,
+			"authorization_code": auth.AuthorizationCode,
+			"max_seats":          auth.MaxSeats,
+			"used_seats":         auth.UsedSeats,
+			"duration_years":     auth.DurationYears,
+			"latest_expiry_date": auth.LatestExpiryDate,
+			"status":             auth.Status,
+			"created_at":         auth.CreatedAt,
+			"updated_at":         auth.UpdatedAt,
+			"active_devices":     activeDevices,
+		}
+	}
+
+	return result, total, nil
 }
 
 // ValidateAuthorizationCode 验证授权码是否有效
@@ -223,12 +245,29 @@ func (s *AuthorizationService) ConsumeSeats(authID uint, count int) error {
 
 // ReleaseSeats 释放席位
 func (s *AuthorizationService) ReleaseSeats(authID uint, count int) error {
-	// 使用原子更新，确保不会小于0
-	err := s.db.Model(&models.Authorization{}).
-		Where("id = ?", authID).
-		Update("used_seats", gorm.Expr("CASE WHEN used_seats - ? < 0 THEN 0 ELSE used_seats - ? END", count, count)).Error
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		// 先获取当前记录
+		var auth models.Authorization
+		err := tx.First(&auth, authID).Error
+		if err != nil {
+			return errors.WrapError(err, 50001, "获取授权码失败")
+		}
 
-	return err
+		// 计算新的已用席位数，确保不会小于0
+		newUsedSeats := auth.UsedSeats - count
+		if newUsedSeats < 0 {
+			newUsedSeats = 0
+		}
+
+		// 更新已用席位数
+		auth.UsedSeats = newUsedSeats
+		err = tx.Save(&auth).Error
+		if err != nil {
+			return errors.WrapError(err, 50001, "释放席位失败")
+		}
+
+		return nil
+	})
 }
 
 // DeleteAuthorization 删除授权码（软删除）

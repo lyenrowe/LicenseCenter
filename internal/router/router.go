@@ -125,8 +125,12 @@ func SetupRouter() *gin.Engine {
 				// 授权码管理
 				adminAuth.POST("/authorizations", authHandler.CreateAuthorization)
 				adminAuth.GET("/authorizations", authHandler.ListAuthorizations)
+				adminAuth.GET("/authorizations/:id/details", authHandler.GetAuthorizationDetails)
 				adminAuth.PUT("/authorizations/:id", authHandler.UpdateAuthorization)
 				adminAuth.DELETE("/authorizations/:id", authHandler.DeleteAuthorization)
+
+				// 设备管理
+				adminAuth.POST("/licenses/:id/force-unbind", licenseHandler.ForceUnbindLicense)
 			}
 		}
 

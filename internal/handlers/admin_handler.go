@@ -422,3 +422,87 @@ func (h *AdminHandler) GetLogs(c *gin.Context) {
 		},
 	})
 }
+
+// GetTOTPSetupInfo 获取TOTP设置信息
+func (h *AdminHandler) GetTOTPSetupInfo(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "无效的管理员ID",
+			"code":  40000,
+		})
+		return
+	}
+
+	info, err := h.adminService.GetTOTPSetupInfo(uint(id))
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			c.JSON(appErr.HTTPStatus(), gin.H{
+				"error": appErr.Message,
+				"code":  appErr.Code,
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "获取TOTP设置信息失败",
+				"code":  50000,
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": info,
+	})
+}
+
+// VerifyTOTPSetup 验证TOTP设置
+func (h *AdminHandler) VerifyTOTPSetup(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "无效的管理员ID",
+			"code":  40000,
+		})
+		return
+	}
+
+	var req struct {
+		TOTPCode string `json:"totp_code" validate:"required,len=6"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "请求参数错误",
+			"code":  40000,
+		})
+		return
+	}
+
+	if err := h.validator.Struct(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "参数验证失败",
+			"code":  40000,
+		})
+		return
+	}
+
+	err = h.adminService.VerifyTOTPSetup(uint(id), req.TOTPCode)
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			c.JSON(appErr.HTTPStatus(), gin.H{
+				"error": appErr.Message,
+				"code":  appErr.Code,
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "验证TOTP失败",
+				"code":  50000,
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "TOTP验证成功",
+	})
+}

@@ -116,8 +116,10 @@ func SetupRouter() *gin.Engine {
 				adminAuth.DELETE("/admins/:id", adminHandler.DeleteAdmin)
 
 				// 双因素认证
-				adminAuth.POST("/totp/enable", adminHandler.EnableTOTP)
-				adminAuth.POST("/totp/disable", adminHandler.DisableTOTP)
+				adminAuth.POST("/totp/enable/:id", adminHandler.EnableTOTP)
+				adminAuth.POST("/totp/disable/:id", adminHandler.DisableTOTP)
+				adminAuth.GET("/totp/info/:id", adminHandler.GetTOTPSetupInfo)
+				adminAuth.POST("/totp/verify/:id", adminHandler.VerifyTOTPSetup)
 
 				// 操作日志
 				adminAuth.GET("/logs", adminHandler.GetLogs)

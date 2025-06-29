@@ -37,7 +37,7 @@
         <el-form-item prop="totpCode">
           <el-input
             v-model="loginForm.totpCode"
-            placeholder="双因子认证码 (可选)"
+            placeholder="双因子认证码"
             size="large"
             prefix-icon="Shield"
             :disabled="loading"
@@ -96,6 +96,11 @@ const loginRules = {
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+  ],
+  totpCode: [
+    { required: true, message: '请输入双因子认证码', trigger: 'blur' },
+    { len: 6, message: '认证码必须为6位数字', trigger: 'blur' },
+    { pattern: /^\d{6}$/, message: '认证码只能包含数字', trigger: 'blur' }
   ]
 }
 

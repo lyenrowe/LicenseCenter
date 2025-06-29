@@ -62,6 +62,10 @@ var (
 	// 认证相关错误 (40xxx)
 	ErrInvalidCredentials = NewAppError(40001, "用户名或密码错误")
 	ErrInvalidTOTP        = NewAppError(40002, "双因素认证码错误")
+	ErrTOTPNotSetup       = NewAppError(40007, "账户未启用双因子认证，请联系管理员")
+	ErrTOTPRequired       = NewAppError(40008, "双因子认证码不能为空")
+	ErrTOTPForceEnabled   = NewAppError(40009, "系统已启用强制双因子认证，无法禁用")
+	ErrTOTPKeyNotSet      = NewAppError(40010, "TOTP密钥未设置")
 
 	// 授权相关错误 (41xxx)
 	ErrAuthCodeNotFound  = NewAppError(43001, "授权码不存在")

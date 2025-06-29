@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lyenrowe/LicenseCenter/internal/config"
 	"github.com/lyenrowe/LicenseCenter/internal/database"
 	"github.com/lyenrowe/LicenseCenter/internal/models"
 	"github.com/lyenrowe/LicenseCenter/pkg/errors"
@@ -66,7 +67,19 @@ func (s *AdminService) AdminLogin(req *AdminLoginRequest) (*models.AdminUser, er
 		return nil, errors.ErrInvalidCredentials
 	}
 
-	// 验证TOTP（如果启用）
+	// 强制双因子认证检查
+	if config.AppConfig.Security.ForceTOTP {
+		// 如果启用了强制TOTP，但用户未设置TOTP密钥
+		if admin.TOTPSecret == "" {
+			return nil, errors.NewAppError(40007, "账户未启用双因子认证，请联系管理员")
+		}
+		// 强制要求提供TOTP码
+		if req.TOTPCode == "" {
+			return nil, errors.NewAppError(40008, "双因子认证码不能为空")
+		}
+	}
+
+	// 验证TOTP（如果启用或强制启用）
 	if admin.TOTPSecret != "" {
 		if req.TOTPCode == "" {
 			return nil, errors.ErrInvalidTOTP
@@ -109,6 +122,18 @@ func (s *AdminService) CreateAdmin(req *CreateAdminRequest) (*models.AdminUser, 
 		Username:     req.Username,
 		PasswordHash: string(passwordHash),
 		IsActive:     true,
+	}
+
+	// 如果启用强制TOTP，自动为新管理员生成TOTP密钥
+	if config.AppConfig.Security.ForceTOTP {
+		key, err := totp.Generate(totp.GenerateOpts{
+			Issuer:      "LicenseCenter",
+			AccountName: admin.Username,
+		})
+		if err != nil {
+			return nil, errors.WrapError(err, 50002, "生成TOTP密钥失败")
+		}
+		admin.TOTPSecret = key.Secret()
 	}
 
 	err = s.db.Create(admin).Error
@@ -219,6 +244,11 @@ func (s *AdminService) EnableTOTP(adminID uint) (string, error) {
 
 // DisableTOTP 禁用TOTP双因素认证
 func (s *AdminService) DisableTOTP(adminID uint) error {
+	// 如果启用了强制TOTP，不允许禁用
+	if config.AppConfig.Security.ForceTOTP {
+		return errors.NewAppError(40009, "系统已启用强制双因子认证，无法禁用")
+	}
+
 	return s.db.Model(&models.AdminUser{}).Where("id = ?", adminID).Update("totp_secret", "").Error
 }
 
@@ -438,4 +468,57 @@ func getTargetDescription(targetType, targetID string) string {
 		}
 		return targetType
 	}
+}
+
+// GetTOTPSetupInfo 获取TOTP设置信息
+func (s *AdminService) GetTOTPSetupInfo(adminID uint) (map[string]interface{}, error) {
+	var admin models.AdminUser
+	err := s.db.First(&admin, adminID).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.NewAppError(40006, "管理员不存在")
+		}
+		return nil, errors.WrapError(err, 50001, "获取管理员失败")
+	}
+
+	result := map[string]interface{}{
+		"has_totp_secret": admin.TOTPSecret != "",
+		"force_totp":      config.AppConfig.Security.ForceTOTP,
+		"can_disable":     !config.AppConfig.Security.ForceTOTP,
+	}
+
+	// 如果有TOTP密钥，生成二维码URL
+	if admin.TOTPSecret != "" {
+		// 手动构建TOTP URL
+		qrCodeURL := fmt.Sprintf("otpauth://totp/LicenseCenter:%s?secret=%s&issuer=LicenseCenter",
+			admin.Username, admin.TOTPSecret)
+		result["qr_code_url"] = qrCodeURL
+	}
+
+	return result, nil
+}
+
+// VerifyTOTPSetup 验证TOTP设置
+func (s *AdminService) VerifyTOTPSetup(adminID uint, totpCode string) error {
+	var admin models.AdminUser
+	err := s.db.First(&admin, adminID).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return errors.NewAppError(40006, "管理员不存在")
+		}
+		return errors.WrapError(err, 50001, "获取管理员失败")
+	}
+
+	// 检查是否已设置TOTP密钥
+	if admin.TOTPSecret == "" {
+		return errors.NewAppError(40010, "TOTP密钥未设置")
+	}
+
+	// 验证TOTP码
+	valid := totp.Validate(totpCode, admin.TOTPSecret)
+	if !valid {
+		return errors.ErrInvalidTOTP
+	}
+
+	return nil
 }

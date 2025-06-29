@@ -35,6 +35,7 @@ type SecurityConfig struct {
 	SessionTimeout      int    `mapstructure:"session_timeout"`
 	AdminSessionTimeout int    `mapstructure:"admin_session_timeout"`
 	RSAKeySize          int    `mapstructure:"rsa_key_size"`
+	ForceTOTP           bool   `mapstructure:"force_totp"` // 强制启用双因子认证
 }
 
 type CaptchaConfig struct {
@@ -97,6 +98,7 @@ func setDefaults() {
 	viper.SetDefault("security.session_timeout", 3600)
 	viper.SetDefault("security.admin_session_timeout", 1800)
 	viper.SetDefault("security.rsa_key_size", 2048)
+	viper.SetDefault("security.force_totp", false)
 
 	viper.SetDefault("captcha.enabled", true)
 

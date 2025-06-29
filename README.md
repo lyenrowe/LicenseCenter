@@ -286,4 +286,40 @@ go test ./tests/... -cover -coverpkg=./internal/... -v
 
 ## 📞 联系方式
 
-如有问题或建议，请通过 GitHub Issues 联系我们。 
+如有问题或建议，请通过 GitHub Issues 联系我们。
+
+## 安全特性
+
+### 双因子认证 (TOTP)
+
+系统支持基于时间的一次性密码 (TOTP) 双因子认证，兼容 Google Authenticator、Microsoft Authenticator 等主流认证应用。
+
+#### 配置选项
+
+在 `configs/app.yaml` 中可以配置：
+
+```yaml
+security:
+  force_totp: true  # 强制启用双因子认证
+```
+
+#### 强制双因子认证
+
+当 `force_totp` 设置为 `true` 时：
+
+1. **新管理员账户**：创建时自动生成 TOTP 密钥
+2. **登录验证**：必须提供双因子认证码才能登录
+3. **禁用限制**：无法禁用已启用的双因子认证
+4. **账户保护**：未设置双因子认证的账户无法登录
+
+#### 使用流程
+
+1. 管理员登录后，扫描二维码将账户添加到认证应用
+2. 每次登录时输入6位认证码
+3. 系统验证认证码后允许访问
+
+#### API 接口
+
+- `POST /admin/totp/enable` - 启用双因子认证
+- `POST /admin/totp/disable` - 禁用双因子认证（强制模式下不可用）
+- `GET /admin/totp/info/:id` - 获取双因子认证设置信息 

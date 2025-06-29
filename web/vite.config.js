@@ -27,6 +27,14 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       }
+    },
+    historyApiFallback: {
+      index: '/index.html',
+      rewrites: [
+        { from: /^\/api\/.*$/, to: function(context) {
+          return context.parsedUrl.pathname;
+        }}
+      ]
     }
   },
   build: {

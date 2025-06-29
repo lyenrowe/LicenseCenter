@@ -1,11 +1,23 @@
 <template>
   <div id="app">
-    <router-view />
+    <router-view v-slot="{ Component }">
+      <transition name="fade" mode="out-in">
+        <component :is="Component" />
+      </transition>
+    </router-view>
   </div>
 </template>
 
 <script setup>
-// 这里可以添加全局逻辑
+import { onErrorCaptured } from 'vue'
+
+// 全局错误处理
+onErrorCaptured((error, instance, info) => {
+  console.error('应用错误:', error)
+  console.error('错误信息:', info)
+  // 在这里可以将错误发送到错误监控服务
+  return false // 阻止错误继续传播
+})
 </script>
 
 <style>
@@ -24,5 +36,16 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* 路由切换动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style> 

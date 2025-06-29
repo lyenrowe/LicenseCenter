@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/lyenrowe/LicenseCenter/internal/database"
@@ -340,6 +341,40 @@ func (s *AdminService) GetDashboardStats() (map[string]interface{}, error) {
 		return nil, errors.WrapError(err, 50001, "获取即将过期授权失败")
 	}
 
+	// 获取最近活动（最近20条操作日志）
+	var recentLogs []models.AdminLog
+	err = s.db.Model(&models.AdminLog{}).
+		Preload("Admin").
+		Order("created_at DESC").
+		Limit(20).
+		Find(&recentLogs).Error
+	if err != nil {
+		return nil, errors.WrapError(err, 50001, "获取最近活动失败")
+	}
+
+	// 转换最近活动数据格式
+	var recentActivities []map[string]interface{}
+	for _, log := range recentLogs {
+		var operatorName string
+		if log.Admin != nil {
+			operatorName = log.Admin.Username
+		} else {
+			operatorName = "系统"
+		}
+
+		// 根据操作类型生成友好的操作描述
+		actionDesc := getActionDescription(log.Action)
+
+		activity := map[string]interface{}{
+			"time":     log.CreatedAt.Format("2006-01-02 15:04:05"),
+			"action":   actionDesc,
+			"target":   getTargetDescription(log.TargetType, log.TargetID),
+			"operator": operatorName,
+			"status":   "success", // 目前记录的都是成功的操作
+		}
+		recentActivities = append(recentActivities, activity)
+	}
+
 	// 合并统计信息
 	for k, v := range authStats {
 		stats[k] = v
@@ -347,6 +382,58 @@ func (s *AdminService) GetDashboardStats() (map[string]interface{}, error) {
 	stats["today_new_authorizations"] = todayAuths
 	stats["today_new_devices"] = todayDevices
 	stats["expiring_licenses"] = expiringLicenses
+	stats["recent_activities"] = recentActivities
+
+	// 添加活跃客户数（有活跃设备的客户数）
+	var activeCustomers int64
+	err = s.db.Raw(`
+		SELECT COUNT(DISTINCT a.customer_name) 
+		FROM authorizations a 
+		INNER JOIN licenses l ON a.id = l.authorization_id 
+		WHERE l.status = ? AND a.status = 1
+	`, models.LicenseStatusActive).Scan(&activeCustomers).Error
+	if err != nil {
+		return nil, errors.WrapError(err, 50001, "获取活跃客户数失败")
+	}
+	stats["active_customers"] = activeCustomers
 
 	return stats, nil
+}
+
+// getActionDescription 根据操作类型返回友好的描述
+func getActionDescription(action string) string {
+	actionMap := map[string]string{
+		"login":                "管理员登录",
+		"create_authorization": "创建授权码",
+		"update_authorization": "修改授权码",
+		"delete_authorization": "删除授权码",
+		"create_admin":         "创建管理员",
+		"update_admin":         "修改管理员",
+		"delete_admin":         "删除管理员",
+		"force_unbind":         "强制解绑设备",
+		"activate_license":     "设备激活",
+		"transfer_license":     "授权转移",
+	}
+
+	if desc, ok := actionMap[action]; ok {
+		return desc
+	}
+	return action
+}
+
+// getTargetDescription 根据目标类型和ID返回友好的描述
+func getTargetDescription(targetType, targetID string) string {
+	switch targetType {
+	case "authorization":
+		return fmt.Sprintf("授权码 %s", targetID)
+	case "admin":
+		return fmt.Sprintf("管理员 ID:%s", targetID)
+	case "license":
+		return fmt.Sprintf("设备 ID:%s", targetID)
+	default:
+		if targetID != "" {
+			return fmt.Sprintf("%s:%s", targetType, targetID)
+		}
+		return targetType
+	}
 }

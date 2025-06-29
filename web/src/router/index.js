@@ -60,7 +60,7 @@ const routes = [
       }
     ]
   },
-  // 404页面
+  // 404页面 - 必须放在最后
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
@@ -75,27 +75,42 @@ const router = createRouter({
 
 // 路由守卫
 router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore()
+  console.log('路由守卫:', { to: to.path, from: from.path })
   
-  if (to.meta.requiresAuth) {
-    if (!authStore.isAuthenticated) {
-      // 未登录，跳转到对应的登录页面
-      if (to.meta.role === 'admin') {
-        next('/admin/login')
-      } else {
-        next('/client/login')
+  try {
+    const authStore = useAuthStore()
+    
+    if (to.meta.requiresAuth) {
+      if (!authStore.isAuthenticated) {
+        console.log('未登录，重定向到登录页')
+        // 未登录，跳转到对应的登录页面
+        if (to.meta.role === 'admin') {
+          next('/admin/login')
+        } else {
+          next('/client/login')
+        }
+        return
       }
-      return
+      
+      // 检查角色权限
+      if (to.meta.role && authStore.userRole !== to.meta.role) {
+        console.log('权限不足，重定向到首页')
+        next('/') // 权限不足，跳转到首页
+        return
+      }
     }
     
-    // 检查角色权限
-    if (to.meta.role && authStore.userRole !== to.meta.role) {
-      next('/') // 权限不足，跳转到首页
-      return
-    }
+    console.log('路由守卫通过')
+    next()
+  } catch (error) {
+    console.error('路由守卫错误:', error)
+    next('/client/login')
   }
-  
-  next()
+})
+
+// 路由错误处理
+router.onError((error) => {
+  console.error('路由错误:', error)
 })
 
 export default router 

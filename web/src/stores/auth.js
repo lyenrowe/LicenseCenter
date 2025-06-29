@@ -24,7 +24,7 @@ export const useAuthStore = defineStore('auth', () => {
       ElMessage.success('登录成功')
       return true
     } catch (error) {
-      ElMessage.error(error.response?.data?.message || '登录失败')
+      ElMessage.error(error.response?.data?.error || error.response?.data?.message || '登录失败')
       return false
     }
   }
@@ -33,13 +33,14 @@ export const useAuthStore = defineStore('auth', () => {
   const adminLoginAction = async (username, password, totpCode) => {
     try {
       const response = await adminLogin(username, password, totpCode)
-      const { session_token, admin_info } = response.data
+      // 后端返回的数据结构：{ token, expires_in, admin: { id, username } }
+      const { token: adminToken, admin } = response.data
       
-      setAuth(session_token, 'admin', admin_info)
+      setAuth(adminToken, 'admin', admin)
       ElMessage.success('登录成功')
       return true
     } catch (error) {
-      ElMessage.error(error.response?.data?.message || '登录失败')
+      ElMessage.error(error.response?.data?.error || error.response?.data?.message || '登录失败')
       return false
     }
   }

@@ -154,15 +154,25 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getAdminDashboard } from '@/api/admin'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElLoading } from 'element-plus'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const userInfo = computed(() => authStore.userInfo)
-const dashboardData = ref({})
+const dashboardData = ref({
+  total_authorizations: 0,
+  active_customers: 0,
+  total_seats: 0,
+  used_seats: 0,
+  today_new_authorizations: 0,
+  today_new_devices: 0,
+  expiring_licenses: 0,
+  recent_activities: []
+})
 const currentTime = ref('')
 const activeMenu = ref('dashboard')
+const loading = ref(false)
 let timeInterval = null
 
 const updateCurrentTime = () => {
@@ -170,16 +180,24 @@ const updateCurrentTime = () => {
 }
 
 const loadDashboard = async () => {
+  loading.value = true
   try {
     const response = await getAdminDashboard()
-    dashboardData.value = response.data
+    if (response.data && response.data.data) {
+      dashboardData.value = { ...dashboardData.value, ...response.data.data }
+    }
+    console.log('Dashboard data loaded:', dashboardData.value)
   } catch (error) {
-    ElMessage.error('加载数据失败')
+    console.error('Dashboard load error:', error)
+    ElMessage.error('加载数据失败：' + (error.response?.data?.error || error.message))
+  } finally {
+    loading.value = false
   }
 }
 
 const refreshData = () => {
   loadDashboard()
+  ElMessage.success('数据已刷新')
 }
 
 const handleMenuSelect = (index) => {

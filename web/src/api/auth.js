@@ -17,7 +17,17 @@ export const adminLogin = (username, password, totpCode) => {
   })
 }
 
-// 注销登录
+// 客户端注销登录
+export const clientLogout = () => {
+  return request.post('/logout')
+}
+
+// 管理员注销登录
+export const adminLogout = () => {
+  return request.post('/admin/logout')
+}
+
+// 通用注销登录（兼容旧版本）
 export const logout = () => {
   return request.post('/logout')
 }

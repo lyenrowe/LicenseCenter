@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lyenrowe/LicenseCenter/internal/config"
 	"github.com/lyenrowe/LicenseCenter/internal/services"
 	"go.uber.org/zap"
 )
@@ -15,6 +16,21 @@ import (
 // LoggingMiddleware 请求日志中间件
 func LoggingMiddleware(logger *zap.Logger) gin.HandlerFunc {
 	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+		// 根据配置决定是否记录HTTP请求日志
+		if config.AppConfig.Logging.EnableHTTPLog {
+			// 使用zap logger记录请求信息
+			logger.Info("HTTP请求",
+				zap.String("method", param.Method),
+				zap.String("path", param.Path),
+				zap.Int("status", param.StatusCode),
+				zap.Duration("latency", param.Latency),
+				zap.String("client_ip", param.ClientIP),
+				zap.String("user_agent", param.Request.UserAgent()),
+				zap.Int("body_size", param.BodySize),
+			)
+		}
+
+		// 返回空字符串避免重复输出到控制台
 		return ""
 	})
 }
@@ -86,6 +102,13 @@ func AdminActionLoggingMiddleware() gin.HandlerFunc {
 func parseActionFromRequest(c *gin.Context, requestBody []byte) (action, targetType, targetID string) {
 	path := c.Request.URL.Path
 	method := c.Request.Method
+
+	// 登出操作
+	if path == "/api/admin/logout" && method == "POST" {
+		action = "logout"
+		targetType = "admin"
+		return action, targetType, targetID
+	}
 
 	// 管理员相关操作
 	if strings.HasPrefix(path, "/api/admin/admins") {

@@ -29,8 +29,8 @@ func NewAdminHandler() *AdminHandler {
 	}
 }
 
-// AdminLogin 管理员登录
-func (h *AdminHandler) AdminLogin(c *gin.Context) {
+// Login 管理员登录
+func (h *AdminHandler) Login(c *gin.Context) {
 	var req services.AdminLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -78,6 +78,11 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 		return
 	}
 
+	// 记录登录日志
+	go h.adminService.LogAction(&admin.ID, "login", "admin", strconv.FormatUint(uint64(admin.ID), 10), c.ClientIP(), gin.H{
+		"username": admin.Username,
+	})
+
 	c.JSON(http.StatusOK, gin.H{
 		"token":      token,
 		"expires_in": int(duration.Seconds()),
@@ -85,6 +90,35 @@ func (h *AdminHandler) AdminLogin(c *gin.Context) {
 			"id":       admin.ID,
 			"username": admin.Username,
 		},
+	})
+}
+
+// Logout 用户登出（管理员和客户端通用）
+func (h *AdminHandler) Logout(c *gin.Context) {
+	// 从JWT中间件获取用户信息
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "用户未认证",
+			"code":  40100,
+		})
+		return
+	}
+
+	username, _ := c.Get("username")
+	userType, _ := c.Get("user_type")
+
+	// 记录登出日志（只有管理员才记录到admin_logs表）
+	if userType == "admin" {
+		adminID := userID.(uint)
+		go h.adminService.LogAction(&adminID, "logout", "admin", strconv.FormatUint(uint64(adminID), 10), c.ClientIP(), gin.H{
+			"username": username,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "注销成功",
 	})
 }
 

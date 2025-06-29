@@ -22,11 +22,14 @@ captcha:
   secret_key: "your-hcaptcha-secret-key"
 
 logging:
+  # 生产环境建议使用info级别，减少日志输出提高性能
   level: "info" # debug, info, warn, error
   file: "./logs/app.log"
   max_size: 100 # MB
   max_backups: 3
   max_age: 30 # days
+  gin_mode: "release" # gin框架模式: debug, release, test
+  enable_http_log: false # 生产环境可以关闭HTTP请求日志以提高性能
 
 system:
   max_bind_files_per_request: 10

@@ -1,8 +1,28 @@
 import request from './request'
 
-// 获取客户端控制台信息
-export const getClientDashboard = () => {
-  return request.get('/dashboard')
+// 客户端登录
+export function clientLogin(data) {
+  return request({
+    url: '/api/login',  // 客户端登录接口
+    method: 'post',
+    data
+  })
+}
+
+// 客户端登出
+export function clientLogout() {
+  return request({
+    url: '/api/logout',  // 客户端登出接口
+    method: 'post'
+  })
+}
+
+// 获取客户端控制台数据
+export function getClientDashboard() {
+  return request({
+    url: '/api/client/dashboard',  // 客户端控制台接口
+    method: 'post'
+  })
 }
 
 // 批量激活设备

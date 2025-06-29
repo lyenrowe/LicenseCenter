@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { clientLogin, adminLogin, logout } from '@/api/auth'
+import { clientLogin, adminLogin, clientLogout, adminLogout } from '@/api/auth'
 
 export const useAuthStore = defineStore('auth', () => {
   // 状态
@@ -48,7 +48,12 @@ export const useAuthStore = defineStore('auth', () => {
   // 注销登录
   const logoutAction = async () => {
     try {
-      await logout()
+      // 根据用户角色调用不同的登出接口
+      if (userRole.value === 'admin') {
+        await adminLogout()
+      } else {
+        await clientLogout()
+      }
     } catch (error) {
       console.error('注销请求失败:', error)
     } finally {

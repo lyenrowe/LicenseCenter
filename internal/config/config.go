@@ -44,11 +44,13 @@ type CaptchaConfig struct {
 }
 
 type LoggingConfig struct {
-	Level      string `mapstructure:"level"`
-	File       string `mapstructure:"file"`
-	MaxSize    int    `mapstructure:"max_size"`
-	MaxBackups int    `mapstructure:"max_backups"`
-	MaxAge     int    `mapstructure:"max_age"`
+	Level         string `mapstructure:"level"`
+	File          string `mapstructure:"file"`
+	MaxSize       int    `mapstructure:"max_size"`
+	MaxBackups    int    `mapstructure:"max_backups"`
+	MaxAge        int    `mapstructure:"max_age"`
+	GinMode       string `mapstructure:"gin_mode"`        // gin框架模式: debug, release, test
+	EnableHTTPLog bool   `mapstructure:"enable_http_log"` // 是否启用HTTP请求日志
 }
 
 type SystemConfig struct {
@@ -103,6 +105,8 @@ func setDefaults() {
 	viper.SetDefault("logging.max_size", 100)
 	viper.SetDefault("logging.max_backups", 3)
 	viper.SetDefault("logging.max_age", 30)
+	viper.SetDefault("logging.gin_mode", "release")
+	viper.SetDefault("logging.enable_http_log", true)
 
 	viper.SetDefault("system.max_bind_files_per_request", 10)
 	viper.SetDefault("system.backup_retention_days", 30)

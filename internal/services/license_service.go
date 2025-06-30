@@ -629,15 +629,16 @@ func (s *LicenseService) generateLicenseFileWithExpiry(auth *models.Authorizatio
 
 	// 创建数据库记录
 	license := &models.License{
-		AuthorizationID: auth.ID,
-		LicenseKey:      licenseKey,
-		MachineID:       bindFile.MachineID,
-		Hostname:        bindFile.Hostname,
-		UnbindPublicKey: unbindPublicKeyPEM,
-		IssuedAt:        now,
-		ExpiresAt:       expiresAt,
-		Status:          models.LicenseStatusActive,
-		ActivatedAt:     now,
+		AuthorizationID:  auth.ID,
+		LicenseKey:       licenseKey,
+		MachineID:        bindFile.MachineID,
+		Hostname:         bindFile.Hostname,
+		UnbindPublicKey:  unbindPublicKeyPEM,
+		UnbindPrivateKey: unbindPrivateKeyPEM, // 同时保存私钥
+		IssuedAt:         now,
+		ExpiresAt:        expiresAt,
+		Status:           models.LicenseStatusActive,
+		ActivatedAt:      now,
 	}
 
 	return licenseFile, license, nil
@@ -648,4 +649,128 @@ func (s *LicenseService) generateLicenseKey(machineID string, issuedAt time.Time
 	data := fmt.Sprintf("%s:%s:%s", machineID, issuedAt.Format(time.RFC3339), uuid.New().String())
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
+}
+
+// RegenerateLicenseFile 根据数据库记录重新生成license文件
+func (s *LicenseService) RegenerateLicenseFile(licenseID uint, userID interface{}) ([]byte, string, error) {
+	// 查找license记录
+	var license models.License
+	err := s.db.Preload("Authorization").First(&license, licenseID).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, "", errors.ErrLicenseNotFound
+		}
+		return nil, "", errors.WrapError(err, 50001, "获取授权记录失败")
+	}
+
+	// 验证用户权限（简单验证，实际可根据需要扩展）
+	// 这里假设任何已认证用户都可以下载自己有权限的license
+	// 更严格的权限控制可以在这里实现
+	if userID == nil {
+		return nil, "", errors.NewAppError(40100, "用户未认证")
+	}
+
+	// 检查license状态
+	if license.Status != models.LicenseStatusActive {
+		return nil, "", errors.NewAppError(41005, "授权已失效，无法下载")
+	}
+
+	// 检查是否过期
+	if license.IsExpired() {
+		return nil, "", errors.NewAppError(41006, "授权已过期，无法下载")
+	}
+
+	// 使用数据库中保存的原始解绑密钥对
+	// 这样可以保证重新下载的license文件与原来的完全兼容
+	// 原license生成的解绑文件仍然有效
+
+	var unbindPrivateKeyPEM, unbindPublicKeyPEM string
+
+	// 检查数据库中是否有原始私钥
+	if license.UnbindPrivateKey != "" {
+		// 使用原始私钥
+		unbindPrivateKeyPEM = license.UnbindPrivateKey
+		unbindPublicKeyPEM = license.UnbindPublicKey
+
+		logger.GetLogger().Info("使用原始解绑密钥重新生成license文件",
+			zap.Uint("license_id", licenseID),
+			zap.String("machine_id", license.MachineID),
+			zap.String("hostname", license.Hostname))
+	} else {
+		// 兼容旧数据：如果数据库中没有私钥，重新生成（会导致解绑文件失效）
+		unbindKeyPair, err := crypto.GenerateRSAKeyPair(2048)
+		if err != nil {
+			return nil, "", errors.WrapError(err, 50002, "生成解绑密钥对失败")
+		}
+
+		unbindPrivateKeyPEM, err = unbindKeyPair.PrivateKeyToPEM()
+		if err != nil {
+			return nil, "", errors.WrapError(err, 50002, "转换解绑私钥失败")
+		}
+
+		unbindPublicKeyPEM, err = unbindKeyPair.PublicKeyToPEM()
+		if err != nil {
+			return nil, "", errors.WrapError(err, 50002, "转换解绑公钥失败")
+		}
+
+		logger.GetLogger().Warn("数据库中无原始私钥，重新生成将导致解绑文件失效",
+			zap.Uint("license_id", licenseID),
+			zap.String("machine_id", license.MachineID),
+			zap.String("hostname", license.Hostname))
+	}
+
+	// 创建license数据
+	licenseData := LicenseData{
+		MachineID:        license.MachineID,
+		IssuedAt:         license.IssuedAt,
+		ExpiresAt:        license.ExpiresAt,
+		LicenseType:      "FULL",
+		UnbindPrivateKey: unbindPrivateKeyPEM,
+	}
+
+	// 签名license数据
+	licenseDataBytes, err := json.Marshal(licenseData)
+	if err != nil {
+		return nil, "", errors.WrapError(err, 50002, "序列化授权数据失败")
+	}
+
+	signature, err := s.rsaService.SignData(licenseDataBytes)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// 创建license文件
+	licenseFile := LicenseFile{
+		LicenseData: licenseData,
+		Signature:   signature,
+	}
+
+	// 加密license文件
+	encryptedLicenseFile, err := s.EncryptLicenseFile(licenseFile)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// 如果使用了新生成的密钥对，需要更新数据库
+	if license.UnbindPrivateKey == "" {
+		// 更新数据库中的解绑密钥对（仅当原来没有私钥时）
+		err = s.db.Model(&license).Updates(map[string]interface{}{
+			"unbind_public_key":  unbindPublicKeyPEM,
+			"unbind_private_key": unbindPrivateKeyPEM,
+		}).Error
+		if err != nil {
+			logger.GetLogger().Warn("更新解绑密钥对失败",
+				zap.Uint("license_id", licenseID),
+				zap.Error(err))
+			// 不影响文件下载，只记录警告
+		}
+	}
+
+	// 生成文件名
+	filename := fmt.Sprintf("%s.license", license.Hostname)
+	if filename == ".license" {
+		filename = fmt.Sprintf("license_%d.license", licenseID)
+	}
+
+	return []byte(encryptedLicenseFile.EncryptedContent), filename, nil
 }

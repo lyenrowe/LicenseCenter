@@ -6,19 +6,20 @@ import (
 
 // License 已激活设备表模型
 type License struct {
-	ID              uint       `gorm:"primaryKey" json:"id"`
-	AuthorizationID uint       `gorm:"not null" json:"authorization_id"`
-	LicenseKey      string     `gorm:"unique;not null" json:"license_key"` // .license文件内容的哈希或唯一标识
-	MachineID       string     `gorm:"not null;size:255" json:"machine_id"`
-	Hostname        string     `gorm:"size:255" json:"hostname"`
-	UnbindPublicKey string     `gorm:"type:text" json:"unbind_public_key"` // 用于验证解绑凭证的一次性公钥
-	IssuedAt        time.Time  `gorm:"not null" json:"issued_at"`
-	ExpiresAt       time.Time  `json:"expires_at"`
-	Status          string     `gorm:"not null;size:50" json:"status"` // 'active', 'unbound', 'force_unbound'
-	ActivatedAt     time.Time  `gorm:"default:CURRENT_TIMESTAMP" json:"activated_at"`
-	UnboundAt       *time.Time `json:"unbound_at"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID               uint       `gorm:"primaryKey" json:"id"`
+	AuthorizationID  uint       `gorm:"not null" json:"authorization_id"`
+	LicenseKey       string     `gorm:"unique;not null" json:"license_key"` // .license文件内容的哈希或唯一标识
+	MachineID        string     `gorm:"not null;size:255" json:"machine_id"`
+	Hostname         string     `gorm:"size:255" json:"hostname"`
+	UnbindPublicKey  string     `gorm:"type:text" json:"unbind_public_key"` // 用于验证解绑凭证的一次性公钥
+	UnbindPrivateKey string     `gorm:"type:text" json:"-"`                 // 用于重新生成license的一次性私钥（敏感信息，不返回给前端）
+	IssuedAt         time.Time  `gorm:"not null" json:"issued_at"`
+	ExpiresAt        time.Time  `json:"expires_at"`
+	Status           string     `gorm:"not null;size:50" json:"status"` // 'active', 'unbound', 'force_unbound'
+	ActivatedAt      time.Time  `gorm:"default:CURRENT_TIMESTAMP" json:"activated_at"`
+	UnboundAt        *time.Time `json:"unbound_at"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 
 	// 关联关系
 	Authorization Authorization `gorm:"foreignKey:AuthorizationID" json:"authorization,omitempty"`

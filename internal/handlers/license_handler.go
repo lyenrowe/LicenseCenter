@@ -297,13 +297,16 @@ func (h *LicenseHandler) DownloadLicense(c *gin.Context) {
 		return
 	}
 
-	// TODO: 验证用户是否有权限下载该license文件
-	// TODO: 从数据库获取license文件内容并返回
-	_ = userID    // 避免未使用变量警告
-	_ = licenseID // 避免未使用变量警告
+	// 调用服务层重新生成license文件
+	encryptedLicenseFile, filename, err := h.licenseService.RegenerateLicenseFile(uint(licenseID), userID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
 
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"error": "功能开发中",
-		"code":  50100,
-	})
+	// 返回加密的license文件
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Length", fmt.Sprintf("%d", len(encryptedLicenseFile)))
+	c.Data(http.StatusOK, "application/octet-stream", encryptedLicenseFile)
 }

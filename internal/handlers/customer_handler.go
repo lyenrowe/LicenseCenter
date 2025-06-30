@@ -14,6 +14,7 @@ import (
 type CustomerHandler struct {
 	authService    *services.AuthorizationService
 	licenseService *services.LicenseService
+	captchaService *services.CaptchaService
 	validator      *validator.Validate
 }
 
@@ -22,6 +23,7 @@ func NewCustomerHandler() *CustomerHandler {
 	return &CustomerHandler{
 		authService:    services.NewAuthorizationService(),
 		licenseService: services.NewLicenseService(),
+		captchaService: services.NewCaptchaService(),
 		validator:      validator.New(),
 	}
 }
@@ -49,8 +51,22 @@ func (h *CustomerHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// TODO: 验证captcha_token (暂时跳过验证)
-	// 在实际部署时应该验证hCaptcha或reCAPTCHA
+	// 验证hCaptcha令牌
+	clientIP := c.ClientIP()
+	if err := h.captchaService.VerifyToken(req.CaptchaToken, clientIP); err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			c.JSON(appErr.HTTPStatus(), gin.H{
+				"error": appErr.Message,
+				"code":  appErr.Code,
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "验证码验证失败",
+				"code":  50000,
+			})
+		}
+		return
+	}
 
 	// 验证授权码
 	authorization, err := h.authService.ValidateAuthorizationCode(req.AuthorizationCode)
@@ -91,6 +107,14 @@ func (h *CustomerHandler) Login(c *gin.Context) {
 			"max_seats":          authorization.MaxSeats,
 			"used_seats":         authorization.UsedSeats,
 		},
+	})
+}
+
+// GetCaptchaConfig 获取验证码配置
+func (h *CustomerHandler) GetCaptchaConfig(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"enabled":  h.captchaService.IsEnabled(),
+		"site_key": h.captchaService.GetSiteKey(),
 	})
 }
 

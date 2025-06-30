@@ -1,5 +1,10 @@
 import request from './request'
 
+// 获取验证码配置
+export const getCaptchaConfig = () => {
+  return request.get('/captcha/config')
+}
+
 // 客户端登录
 export const clientLogin = (authorizationCode, captchaToken) => {
   return request.post('/login', {

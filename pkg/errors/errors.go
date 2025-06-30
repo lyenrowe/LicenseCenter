@@ -76,6 +76,14 @@ var (
 	ErrDuplicateMachine  = NewAppError(40016, "设备已被激活")
 	ErrLicenseNotFound   = NewAppError(40017, "授权记录不存在")
 
+	// 验证码相关错误 (402xx)
+	ErrCaptchaFallbackInProduction = NewAppError(40020, "生产环境不允许使用降级验证码")
+	ErrCaptchaTokenEmpty           = NewAppError(40021, "验证码令牌不能为空")
+	ErrCaptchaResponseMissing      = NewAppError(40022, "验证码响应缺失")
+	ErrCaptchaResponseInvalid      = NewAppError(40023, "验证码响应无效")
+	ErrCaptchaExpiredOrDuplicate   = NewAppError(40024, "验证码已过期或重复使用")
+	ErrCaptchaVerificationFailed   = NewAppError(40026, "人机验证失败")
+
 	// 资源不存在错误 (43xxx)
 	ErrAuthCodeNotFound = NewAppError(43001, "授权码不存在")
 

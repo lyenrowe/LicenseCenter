@@ -33,7 +33,7 @@
               :disabled="loading"
               readonly
             />
-            <div id="captcha" class="captcha-widget"></div>
+            <div id="hcaptcha" class="captcha-widget"></div>
           </div>
         </el-form-item>
         
@@ -51,31 +51,24 @@
         </el-form-item>
       </el-form>
       
-      <div class="login-footer">
-        <el-divider>或</el-divider>
-        <el-button 
-          text 
-          type="primary" 
-          @click="goToAdminLogin"
-        >
-          管理员登录
-        </el-button>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
+import { getCaptchaConfig } from '@/api/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const loginFormRef = ref()
 const loading = ref(false)
+let hcaptchaWidgetId = null
+const captchaConfig = ref({ enabled: true, site_key: '' })
 
 const loginForm = reactive({
   authorizationCode: '',
@@ -89,15 +82,100 @@ const loginRules = {
   ]
 }
 
+// 加载hCaptcha脚本
+const loadHCaptchaScript = () => {
+  return new Promise((resolve, reject) => {
+    // 检查是否已经加载
+    if (window.hcaptcha) {
+      resolve()
+      return
+    }
+
+    // 检查是否已经有脚本标签
+    if (document.querySelector('script[src*="hcaptcha"]')) {
+      // 等待脚本加载完成
+      const checkHCaptcha = () => {
+        if (window.hcaptcha) {
+          resolve()
+        } else {
+          setTimeout(checkHCaptcha, 100)
+        }
+      }
+      checkHCaptcha()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://js.hcaptcha.com/1/api.js'
+    script.async = true
+    script.defer = true
+    script.onload = resolve
+    script.onerror = reject
+    document.head.appendChild(script)
+  })
+}
+
 // 初始化验证码
-const initCaptcha = () => {
-  // 这里模拟hCaptcha初始化
-  // 在实际项目中，需要引入hCaptcha或reCAPTCHA的SDK
+const initCaptcha = async () => {
+  try {
+    await loadHCaptchaScript()
+    
+    await nextTick()
+    
+    // 清理现有的验证码组件
+    if (hcaptchaWidgetId !== null && window.hcaptcha) {
+      try {
+        window.hcaptcha.remove(hcaptchaWidgetId)
+      } catch (e) {
+        console.warn('清理hCaptcha组件时出错:', e)
+      }
+      hcaptchaWidgetId = null
+    }
+
+    // 清空token
+    loginForm.captchaToken = ''
+
+    const captchaContainer = document.getElementById('hcaptcha')
+    if (!captchaContainer) {
+      console.error('未找到hCaptcha容器')
+      return
+    }
+
+    // 清空容器
+    captchaContainer.innerHTML = ''
+
+    // 渲染hCaptcha
+    hcaptchaWidgetId = window.hcaptcha.render('hcaptcha', {
+      sitekey: captchaConfig.value.site_key || import.meta.env.VITE_HCAPTCHA_SITE_KEY || '10000000-ffff-ffff-ffff-000000000001', // 优先使用服务端配置
+      callback: (token) => {
+        loginForm.captchaToken = token
+        console.log('hCaptcha验证成功')
+      },
+      'expired-callback': () => {
+        loginForm.captchaToken = ''
+        console.log('hCaptcha已过期')
+        ElMessage.warning('验证码已过期，请重新验证')
+      },
+      'error-callback': () => {
+        loginForm.captchaToken = ''
+        console.error('hCaptcha验证出错')
+        ElMessage.error('验证码加载失败，请刷新页面重试')
+      }
+    })
+  } catch (error) {
+    console.error('初始化hCaptcha失败:', error)
+    // 降级到本地验证码
+    initFallbackCaptcha()
+  }
+}
+
+// 降级验证码（开发环境或hCaptcha加载失败时使用）
+const initFallbackCaptcha = () => {
   nextTick(() => {
-    const captchaContainer = document.getElementById('captcha')
+    const captchaContainer = document.getElementById('hcaptcha')
     if (captchaContainer) {
       captchaContainer.innerHTML = `
-        <div class="mock-captcha" style="
+        <div class="fallback-captcha" style="
           width: 100%;
           height: 78px;
           border: 1px solid #ddd;
@@ -108,14 +186,14 @@ const initCaptcha = () => {
           margin-top: 8px;
           cursor: pointer;
           border-radius: 4px;
-        " onclick="mockCaptchaClick()">
-          <span style="color: #666;">点击完成人机验证 (模拟)</span>
+        " onclick="fallbackCaptchaClick()">
+          <span style="color: #666;">点击完成人机验证 (开发模式)</span>
         </div>
       `
       
-      // 模拟验证码回调
-      window.mockCaptchaClick = () => {
-        loginForm.captchaToken = 'mock_captcha_token_' + Date.now()
+      // 降级验证码回调
+      window.fallbackCaptchaClick = () => {
+        loginForm.captchaToken = 'fallback_captcha_token_' + Date.now()
         captchaContainer.innerHTML = `
           <div style="
             width: 100%;
@@ -128,13 +206,29 @@ const initCaptcha = () => {
             margin-top: 8px;
             border-radius: 4px;
           ">
-            <el-icon style="color: #67c23a; margin-right: 8px;"><SuccessFilled /></el-icon>
-            <span style="color: #67c23a;">验证成功</span>
+            <span style="color: #67c23a;">✓ 验证成功 (开发模式)</span>
           </div>
         `
       }
     }
   })
+}
+
+// 重置验证码
+const resetCaptcha = () => {
+  if (window.hcaptcha && hcaptchaWidgetId !== null) {
+    try {
+      window.hcaptcha.reset(hcaptchaWidgetId)
+      loginForm.captchaToken = ''
+    } catch (error) {
+      console.warn('重置hCaptcha失败:', error)
+      // 重新初始化
+      initCaptcha()
+    }
+  } else {
+    // 降级验证码重置
+    initFallbackCaptcha()
+  }
 }
 
 const handleLogin = async () => {
@@ -158,18 +252,52 @@ const handleLogin = async () => {
     
     if (success) {
       router.push('/client/dashboard')
+    } else {
+      // 登录失败，重置验证码
+      resetCaptcha()
     }
+  } catch (error) {
+    // 登录失败，重置验证码
+    resetCaptcha()
   } finally {
     loading.value = false
   }
 }
 
-const goToAdminLogin = () => {
-  router.push('/admin/login')
+// 清理资源
+onUnmounted(() => {
+  if (window.hcaptcha && hcaptchaWidgetId !== null) {
+    try {
+      window.hcaptcha.remove(hcaptchaWidgetId)
+    } catch (e) {
+      console.warn('清理hCaptcha组件时出错:', e)
+    }
+  }
+  
+  // 清理全局回调函数
+  if (window.fallbackCaptchaClick) {
+    delete window.fallbackCaptchaClick
+  }
+})
+
+// 获取验证码配置
+const fetchCaptchaConfig = async () => {
+  try {
+    const response = await getCaptchaConfig()
+    captchaConfig.value = response.data
+  } catch (error) {
+    console.warn('获取验证码配置失败，使用默认配置:', error)
+  }
 }
 
-onMounted(() => {
-  initCaptcha()
+onMounted(async () => {
+  await fetchCaptchaConfig()
+  if (captchaConfig.value.enabled) {
+    initCaptcha()
+  } else {
+    // 如果验证码被禁用，设置一个默认token
+    loginForm.captchaToken = 'disabled'
+  }
 })
 </script>
 
@@ -218,6 +346,10 @@ onMounted(() => {
   width: 100%;
 }
 
+.captcha-widget {
+  margin-top: 8px;
+}
+
 .login-button {
   width: 100%;
   height: 44px;
@@ -225,12 +357,22 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.login-footer {
-  text-align: center;
-}
-
 :deep(.el-divider__text) {
   background-color: white;
   color: #909399;
+}
+
+/* hCaptcha样式调整 */
+:deep(.h-captcha) {
+  margin-top: 8px;
+}
+
+.fallback-captcha {
+  transition: all 0.3s ease;
+}
+
+.fallback-captcha:hover {
+  background: #e8e8e8 !important;
+  border-color: #999 !important;
 }
 </style> 

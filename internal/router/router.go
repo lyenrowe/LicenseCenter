@@ -85,7 +85,8 @@ func SetupRouter() *gin.Engine {
 	api := r.Group("/api")
 	{
 		// 客户端相关路由 (无需认证)
-		api.POST("/login", customerHandler.Login) // 客户端登录
+		api.GET("/captcha/config", customerHandler.GetCaptchaConfig) // 获取验证码配置
+		api.POST("/login", customerHandler.Login)                    // 客户端登录
 
 		// 客户端认证后的路由
 		customerAuth := api.Group("/", middleware.JWTAuthMiddleware(), middleware.CustomerAuthMiddleware())

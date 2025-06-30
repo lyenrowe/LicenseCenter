@@ -42,6 +42,9 @@ help:
 	@echo "  setup      - 初始化项目环境"
 	@echo "  init-system - 初始化系统数据"
 	@echo "  reset-db   - 重置数据库"
+	@echo "  machine-id - 机器ID调试工具"
+	@echo "  machine-id-debug - 机器ID详细调试"
+	@echo "  network-debug - 网络接口调试"
 	@echo ""
 
 # 安装依赖
@@ -109,6 +112,21 @@ run-client: client
 generate-bind: client
 	@echo "📄 生成绑定文件..."
 	./$(BUILD_DIR)/$(TEST_CLIENT) generate-bind
+
+# 机器ID调试工具
+machine-id:
+	@echo "🔍 机器ID调试..."
+	$(GOCMD) run cmd/machine-id-debug/main.go
+
+# 机器ID详细调试
+machine-id-debug:
+	@echo "🔍 机器ID详细调试..."
+	$(GOTEST) ./pkg/utils/ -v -run TestGetMachineIDDebug
+
+# 网络接口调试
+network-debug:
+	@echo "🌐 网络接口调试..."
+	$(GOTEST) ./pkg/utils/ -v -run TestNetworkInterfaces
 
 # 初始化项目环境
 setup:

@@ -60,6 +60,225 @@ type UnbindFile struct {
 	UnbindProof   string      `json:"unbind_proof"`
 }
 
+// EncryptedFileResponse 加密文件响应结构
+type EncryptedFileResponse struct {
+	EncryptedContent string `json:"encrypted_content"` // Base64编码的加密数据
+	FileType         string `json:"file_type"`         // 文件类型：bind, license, unbind
+}
+
+// ActivateLicensesEncrypted 批量激活设备（返回加密文件）
+func (s *LicenseService) ActivateLicensesEncrypted(authCode string, encryptedBindFiles []string) ([]EncryptedFileResponse, error) {
+	// 1. 解密绑定文件
+	bindFiles, err := s.DecryptBindFiles(encryptedBindFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 生成普通授权文件
+	licenseFiles, err := s.ActivateLicenses(authCode, bindFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. 加密授权文件
+	encryptedLicenseFiles, err := s.EncryptLicenseFiles(licenseFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	return encryptedLicenseFiles, nil
+}
+
+// TransferLicenseEncrypted 授权转移（使用加密文件）
+func (s *LicenseService) TransferLicenseEncrypted(authCode string, encryptedUnbindFile, encryptedBindFile string) (*EncryptedFileResponse, error) {
+	// 1. 解密文件
+	unbindFile, err := s.DecryptUnbindFile(encryptedUnbindFile)
+	if err != nil {
+		return nil, err
+	}
+
+	bindFile, err := s.DecryptBindFile(encryptedBindFile)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 执行授权转移
+	newLicenseFile, err := s.TransferLicense(authCode, *unbindFile, *bindFile)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. 加密新的授权文件
+	encryptedLicenseFile, err := s.EncryptLicenseFile(*newLicenseFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return encryptedLicenseFile, nil
+}
+
+// DecryptBindFiles 解密绑定文件列表
+func (s *LicenseService) DecryptBindFiles(encryptedBindFiles []string) ([]BindFile, error) {
+	privateKey, _, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	var bindFiles []BindFile
+	for i, encryptedData := range encryptedBindFiles {
+		jsonData, err := crypto.DecryptFileFromBase64(privateKey, encryptedData)
+		if err != nil {
+			return nil, errors.WrapError(err, 41003, fmt.Sprintf("解密第%d个绑定文件失败", i+1))
+		}
+
+		var bindFile BindFile
+		if err := json.Unmarshal(jsonData, &bindFile); err != nil {
+			return nil, errors.WrapError(err, 41003, fmt.Sprintf("解析第%d个绑定文件失败", i+1))
+		}
+
+		bindFiles = append(bindFiles, bindFile)
+	}
+
+	return bindFiles, nil
+}
+
+// DecryptBindFile 解密单个绑定文件
+func (s *LicenseService) DecryptBindFile(encryptedBindFile string) (*BindFile, error) {
+	privateKey, _, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, err := crypto.DecryptFileFromBase64(privateKey, encryptedBindFile)
+	if err != nil {
+		return nil, errors.WrapError(err, 41003, "解密绑定文件失败")
+	}
+
+	var bindFile BindFile
+	if err := json.Unmarshal(jsonData, &bindFile); err != nil {
+		return nil, errors.WrapError(err, 41003, "解析绑定文件失败")
+	}
+
+	return &bindFile, nil
+}
+
+// DecryptUnbindFile 解密解绑文件
+func (s *LicenseService) DecryptUnbindFile(encryptedUnbindFile string) (*UnbindFile, error) {
+	privateKey, _, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, err := crypto.DecryptFileFromBase64(privateKey, encryptedUnbindFile)
+	if err != nil {
+		return nil, errors.WrapError(err, 41004, "解密解绑文件失败")
+	}
+
+	var unbindFile UnbindFile
+	if err := json.Unmarshal(jsonData, &unbindFile); err != nil {
+		return nil, errors.WrapError(err, 41004, "解析解绑文件失败")
+	}
+
+	return &unbindFile, nil
+}
+
+// EncryptLicenseFiles 加密授权文件列表
+func (s *LicenseService) EncryptLicenseFiles(licenseFiles []LicenseFile) ([]EncryptedFileResponse, error) {
+	_, publicKey, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	var encryptedFiles []EncryptedFileResponse
+	for i, licenseFile := range licenseFiles {
+		jsonData, err := json.Marshal(licenseFile)
+		if err != nil {
+			return nil, errors.WrapError(err, 50002, fmt.Sprintf("序列化第%d个授权文件失败", i+1))
+		}
+
+		encryptedContent, err := crypto.EncryptFileToBase64(publicKey, jsonData)
+		if err != nil {
+			return nil, errors.WrapError(err, 50002, fmt.Sprintf("加密第%d个授权文件失败", i+1))
+		}
+
+		encryptedFiles = append(encryptedFiles, EncryptedFileResponse{
+			EncryptedContent: encryptedContent,
+			FileType:         "license",
+		})
+	}
+
+	return encryptedFiles, nil
+}
+
+// EncryptLicenseFile 加密单个授权文件
+func (s *LicenseService) EncryptLicenseFile(licenseFile LicenseFile) (*EncryptedFileResponse, error) {
+	_, publicKey, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, err := json.Marshal(licenseFile)
+	if err != nil {
+		return nil, errors.WrapError(err, 50002, "序列化授权文件失败")
+	}
+
+	encryptedContent, err := crypto.EncryptFileToBase64(publicKey, jsonData)
+	if err != nil {
+		return nil, errors.WrapError(err, 50002, "加密授权文件失败")
+	}
+
+	return &EncryptedFileResponse{
+		EncryptedContent: encryptedContent,
+		FileType:         "license",
+	}, nil
+}
+
+// EncryptBindFile 加密绑定文件（客户端使用）
+func (s *LicenseService) EncryptBindFile(bindFile BindFile) (*EncryptedFileResponse, error) {
+	_, publicKey, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, err := json.Marshal(bindFile)
+	if err != nil {
+		return nil, errors.WrapError(err, 50002, "序列化绑定文件失败")
+	}
+
+	encryptedContent, err := crypto.EncryptFileToBase64(publicKey, jsonData)
+	if err != nil {
+		return nil, errors.WrapError(err, 50002, "加密绑定文件失败")
+	}
+
+	return &EncryptedFileResponse{
+		EncryptedContent: encryptedContent,
+		FileType:         "bind",
+	}, nil
+}
+
+// EncryptUnbindFile 加密解绑文件（客户端使用）
+func (s *LicenseService) EncryptUnbindFile(unbindFile UnbindFile) (*EncryptedFileResponse, error) {
+	_, publicKey, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, err := json.Marshal(unbindFile)
+	if err != nil {
+		return nil, errors.WrapError(err, 50002, "序列化解绑文件失败")
+	}
+
+	encryptedContent, err := crypto.EncryptFileToBase64(publicKey, jsonData)
+	if err != nil {
+		return nil, errors.WrapError(err, 50002, "加密解绑文件失败")
+	}
+
+	return &EncryptedFileResponse{
+		EncryptedContent: encryptedContent,
+		FileType:         "unbind",
+	}, nil
+}
+
 // ActivateLicenses 批量激活设备
 func (s *LicenseService) ActivateLicenses(authCode string, bindFiles []BindFile) ([]LicenseFile, error) {
 	// 验证授权码

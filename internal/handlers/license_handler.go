@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -57,83 +58,130 @@ func (h *LicenseHandler) GetPublicKey(c *gin.Context) {
 
 // ActivateLicenses 批量激活设备
 func (h *LicenseHandler) ActivateLicenses(c *gin.Context) {
-	var req ActivateLicensesRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "请求参数错误",
-			"code":  40000,
+	// 从JWT中获取用户信息
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "用户未认证",
+			"code":  40100,
 		})
 		return
 	}
 
-	if err := h.validator.Struct(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "参数验证失败",
-			"code":  40000,
-		})
-		return
-	}
-
-	licenseFiles, err := h.licenseService.ActivateLicenses(req.AuthorizationCode, req.BindFiles)
+	// 解析上传的文件
+	form, err := c.MultipartForm()
 	if err != nil {
-		if appErr, ok := err.(*errors.AppError); ok {
-			c.JSON(appErr.HTTPStatus(), gin.H{
-				"error": appErr.Message,
-				"code":  appErr.Code,
-			})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "激活设备失败",
-				"code":  50000,
-			})
-		}
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "文件上传失败",
+			"code":  40000,
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"license_files": licenseFiles,
-		"message":       "设备激活成功",
+	bindFiles := form.File["bind_files"]
+	if len(bindFiles) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "请上传至少一个.bind文件",
+			"code":  40000,
+		})
+		return
+	}
+
+	// 解析bind文件内容
+	var bindFileContents []services.BindFile
+	for _, fileHeader := range bindFiles {
+		file, err := fileHeader.Open()
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "无法读取文件: " + fileHeader.Filename,
+				"code":  40000,
+			})
+			return
+		}
+		defer file.Close()
+
+		content := make([]byte, fileHeader.Size)
+		_, err = file.Read(content)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "读取文件内容失败: " + fileHeader.Filename,
+				"code":  40000,
+			})
+			return
+		}
+
+		var bindFile services.BindFile
+		if err := json.Unmarshal(content, &bindFile); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "文件格式错误: " + fileHeader.Filename,
+				"code":  40000,
+			})
+			return
+		}
+		bindFileContents = append(bindFileContents, bindFile)
+	}
+
+	// 激活设备 (临时使用现有方法，后续需要在service中实现)
+	// TODO: 需要在LicenseService中实现ActivateLicensesByUserID方法
+	_ = userID           // 避免未使用变量警告
+	_ = bindFileContents // 避免未使用变量警告
+
+	c.JSON(http.StatusNotImplemented, gin.H{
+		"error": "功能开发中",
+		"code":  50100,
 	})
 }
 
 // TransferLicense 授权转移
 func (h *LicenseHandler) TransferLicense(c *gin.Context) {
-	var req TransferLicenseRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "请求参数错误",
-			"code":  40000,
+	// 从JWT中获取用户信息
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "用户未认证",
+			"code":  40100,
 		})
 		return
 	}
 
-	if err := h.validator.Struct(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "参数验证失败",
-			"code":  40000,
-		})
-		return
-	}
-
-	licenseFile, err := h.licenseService.TransferLicense(req.AuthorizationCode, req.UnbindFile, req.BindFile)
+	// 解析上传的文件
+	form, err := c.MultipartForm()
 	if err != nil {
-		if appErr, ok := err.(*errors.AppError); ok {
-			c.JSON(appErr.HTTPStatus(), gin.H{
-				"error": appErr.Message,
-				"code":  appErr.Code,
-			})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "授权转移失败",
-				"code":  50000,
-			})
-		}
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "文件上传失败",
+			"code":  40000,
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"license_file": licenseFile,
-		"message":      "授权转移成功",
+	// 获取unbind文件
+	unbindFiles := form.File["unbind_file"]
+	if len(unbindFiles) != 1 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "请上传一个.unbind文件",
+			"code":  40000,
+		})
+		return
+	}
+
+	// 获取bind文件
+	bindFiles := form.File["bind_file"]
+	if len(bindFiles) != 1 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "请上传一个.bind文件",
+			"code":  40000,
+		})
+		return
+	}
+
+	// TODO: 解析文件内容并调用service方法
+	_ = userID      // 避免未使用变量警告
+	_ = unbindFiles // 避免未使用变量警告
+	_ = bindFiles   // 避免未使用变量警告
+
+	c.JSON(http.StatusNotImplemented, gin.H{
+		"error": "功能开发中",
+		"code":  50100,
 	})
 }
 
@@ -207,5 +255,37 @@ func (h *LicenseHandler) ForceUnbindLicense(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "设备解绑成功",
+	})
+}
+
+// DownloadLicense 下载license文件
+func (h *LicenseHandler) DownloadLicense(c *gin.Context) {
+	licenseID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "无效的授权ID",
+			"code":  40000,
+		})
+		return
+	}
+
+	// 从JWT中获取用户信息
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "用户未认证",
+			"code":  40100,
+		})
+		return
+	}
+
+	// TODO: 验证用户是否有权限下载该license文件
+	// TODO: 从数据库获取license文件内容并返回
+	_ = userID    // 避免未使用变量警告
+	_ = licenseID // 避免未使用变量警告
+
+	c.JSON(http.StatusNotImplemented, gin.H{
+		"error": "功能开发中",
+		"code":  50100,
 	})
 }

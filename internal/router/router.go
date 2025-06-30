@@ -94,7 +94,7 @@ func SetupRouter() *gin.Engine {
 		// 客户端控制台路由
 		client := api.Group("/client", middleware.JWTAuthMiddleware(), middleware.CustomerAuthMiddleware())
 		{
-			client.POST("/dashboard", customerHandler.GetDashboard) // 客户端控制台
+			client.GET("/dashboard", customerHandler.GetDashboard) // 客户端控制台
 		}
 
 		// 管理员路由组
@@ -136,17 +136,21 @@ func SetupRouter() *gin.Engine {
 			}
 		}
 
-		// 许可证相关路由 (需要JWT认证，但不区分管理员或客户端)
-		license := api.Group("/license", middleware.JWTAuthMiddleware())
+		// 客户端操作路由 (需要客户端认证)
+		actions := api.Group("/actions", middleware.JWTAuthMiddleware(), middleware.CustomerAuthMiddleware())
 		{
-			license.POST("/activate", licenseHandler.ActivateLicenses)
-			license.POST("/transfer", licenseHandler.TransferLicense)
-			license.POST("/unbind", licenseHandler.ForceUnbindLicense)
+			actions.POST("/activate-licenses", licenseHandler.ActivateLicenses)
+			actions.POST("/transfer-license", licenseHandler.TransferLicense)
+		}
+
+		// 许可证相关路由 (需要JWT认证，但不区分管理员或客户端)
+		licenses := api.Group("/licenses", middleware.JWTAuthMiddleware())
+		{
+			licenses.GET("/:id/download", licenseHandler.DownloadLicense)
 		}
 
 		// 公开接口
 		api.GET("/public-key", licenseHandler.GetPublicKey)
-		api.GET("/licenses", licenseHandler.GetLicensesByAuth)
 	}
 
 	return r

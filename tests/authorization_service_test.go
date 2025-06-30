@@ -293,7 +293,7 @@ func (suite *AuthorizationServiceTestSuite) TestListAuthorizationsWithSearch() {
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), int64(1), total)
 	assert.Len(suite.T(), auths, 1)
-	assert.Equal(suite.T(), "Apple公司", auths[0].CustomerName)
+	assert.Equal(suite.T(), "Apple公司", auths[0]["customer_name"])
 }
 
 func (suite *AuthorizationServiceTestSuite) TestGetStatistics() {

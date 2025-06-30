@@ -41,6 +41,20 @@ export function activateLicenses(bindFiles) {
     },
     responseType: 'blob', // 返回ZIP文件
     timeout: 60000
+  }).catch(error => {
+    // 如果是业务错误（400-499），尝试提取具体错误信息
+    if (error.response && error.response.status >= 400 && error.response.status < 500) {
+      const data = error.response.data
+      if (data && data.error) {
+        // 创建一个新的错误对象，包含具体的错误信息
+        const businessError = new Error(data.error)
+        businessError.code = data.code
+        businessError.response = error.response
+        throw businessError
+      }
+    }
+    // 其他错误直接抛出
+    throw error
   })
 }
 
@@ -59,6 +73,20 @@ export function transferLicense(unbindFile, bindFile) {
     },
     responseType: 'blob', // 返回license文件
     timeout: 30000
+  }).catch(error => {
+    // 如果是业务错误（400-499），尝试提取具体错误信息
+    if (error.response && error.response.status >= 400 && error.response.status < 500) {
+      const data = error.response.data
+      if (data && data.error) {
+        // 创建一个新的错误对象，包含具体的错误信息
+        const businessError = new Error(data.error)
+        businessError.code = data.code
+        businessError.response = error.response
+        throw businessError
+      }
+    }
+    // 其他错误直接抛出
+    throw error
   })
 }
 

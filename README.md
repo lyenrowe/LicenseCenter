@@ -288,6 +288,231 @@ go test ./tests/... -cover -coverpkg=./internal/... -v
 
 如有问题或建议，请通过 GitHub Issues 联系我们。
 
+## 📝 日志分层错误处理系统
+
+### 概述
+
+LicenseCenter 实现了完整的分层错误处理和日志记录系统，针对 Go 语言缺乏全局异常处理的特点，通过统一中间件和错误分类实现了类似其他语言的错误处理机制。
+
+### 架构设计
+
+#### 错误分类体系
+
+```go
+// 业务逻辑错误 (40xxx) - 记录到 app.log
+ErrDuplicateMachine  = NewAppError(40016, "设备已被激活")
+ErrInsufficientSeats = NewAppError(40015, "可用席位不足")
+ErrAuthCodeDisabled  = NewAppError(40011, "授权码已被禁用")
+
+// 系统错误 (50xxx) - 记录到 app.log + app_error.log
+ErrCryptoError = NewAppError(50001, "加密操作失败")
+```
+
+#### 日志文件分离
+
+- **`logs/app.log`**: 记录所有日志（INFO、WARN、ERROR）
+- **`logs/app_error.log`**: 仅记录严重的系统错误（ERROR级别）
+
+### 核心组件
+
+#### 1. 统一错误处理中间件
+
+**文件**: `internal/middleware/error_handler.go`
+
+```go
+// 统一错误处理入口点
+func ErrorHandlerMiddleware() gin.HandlerFunc
+func ErrorResponseHandler() gin.HandlerFunc
+
+// 根据错误类型自动分类处理
+func handleError(c *gin.Context, err error)
+```
+
+**功能特性**:
+- 自动识别业务错误 vs 系统错误
+- 根据错误代码自动分配日志级别
+- 提取完整的请求上下文信息
+- 处理 panic 恢复并记录堆栈
+
+#### 2. 增强型日志系统
+
+**文件**: `pkg/logger/logger.go`
+
+```go
+// 支持多文件输出的日志配置
+type LogConfig struct {
+    Level       string
+    AppLogFile  string      // 应用日志文件
+    ErrorLogFile string     // 错误日志文件
+}
+
+// 双日志器实例
+var (
+    Logger      *zap.Logger  // 应用日志器
+    ErrorLogger *zap.Logger  // 错误日志器
+)
+```
+
+**功能特性**:
+- 自动生成错误日志文件路径（`app.log` → `app_error.log`）
+- 控制台 + 文件双重输出
+- JSON 格式化便于日志分析
+- 结构化字段记录
+
+#### 3. 前端错误处理优化
+
+**文件**: `web/src/api/request.js`、`web/src/api/client.js`
+
+```javascript
+// 自动处理 blob 响应中的错误信息
+if (data instanceof Blob && status >= 400) {
+  // 将 blob 转换为 JSON 提取错误
+}
+
+// API 层错误包装
+.catch(error => {
+  if (error.response && error.response.status >= 400) {
+    const businessError = new Error(data.error)
+    businessError.code = data.code
+    throw businessError
+  }
+})
+```
+
+### 日志级别映射
+
+| 错误代码范围 | 错误类型 | 日志级别 | 记录位置 | 示例 |
+|-------------|----------|----------|----------|------|
+| 40000-40999 | 客户端错误 | WARN | app.log | 参数验证失败 |
+| 41000-41999 | 业务逻辑错误 | WARN | app.log | 设备已被激活 |
+| 43000-43999 | 资源不存在 | INFO | app.log | 授权码不存在 |
+| 50000+ | 系统错误 | ERROR | app.log + app_error.log | 数据库连接失败 |
+
+### 使用方法
+
+#### 1. 处理器中的错误处理
+
+**简化前**（繁琐的错误处理）:
+```go
+if err != nil {
+    if appErr, ok := err.(*errors.AppError); ok {
+        logger.GetLogger().Error("设备激活失败", /* 大量重复代码 */)
+        c.JSON(appErr.HTTPStatus(), gin.H{"error": appErr.Message})
+    } else {
+        logger.GetLogger().Error("系统错误", /* 大量重复代码 */)
+        c.JSON(500, gin.H{"error": "内部错误"})
+    }
+    return
+}
+```
+
+**简化后**（统一处理）:
+```go
+if err != nil {
+    c.Error(err)  // 让中间件统一处理
+    return
+}
+```
+
+#### 2. 业务层中记录关键错误
+
+```go
+// 在关键业务逻辑中添加详细日志
+if err == nil {
+    logger.GetLogger().Warn("设备重复激活被阻止",
+        zap.String("auth_code", auth.AuthorizationCode),
+        zap.String("machine_id", bindFile.MachineID),
+        zap.String("hostname", bindFile.Hostname),
+        zap.Uint("existing_license_id", existing.ID),
+        zap.String("customer_name", auth.CustomerName),
+    )
+    return nil, errors.ErrDuplicateMachine
+}
+```
+
+### 日志样例
+
+#### 业务错误日志 (app.log)
+
+```json
+{
+  "level": "WARN",
+  "timestamp": "2025-06-30T18:30:00.000+0800",
+  "caller": "middleware/error_handler.go:95",
+  "msg": "业务警告",
+  "error_type": "business",
+  "error_code": 40016,
+  "error_message": "设备已被激活",
+  "path": "/api/actions/activate-licenses",
+  "method": "POST",
+  "client_ip": "::1",
+  "username": "ABC-123-TEST"
+}
+```
+
+#### 系统错误日志 (app_error.log)
+
+```json
+{
+  "level": "ERROR",
+  "timestamp": "2025-06-30T18:30:00.000+0800", 
+  "caller": "middleware/error_handler.go:128",
+  "msg": "系统错误",
+  "error_type": "system",
+  "error": "database connection failed",
+  "path": "/api/actions/activate-licenses",
+  "method": "POST",
+  "client_ip": "::1",
+  "stack": "goroutine 1 [running]:\n..."
+}
+```
+
+### 前端错误显示优化
+
+**优化前**: 显示通用错误
+```
+❌ 设备激活失败
+```
+
+**优化后**: 显示具体错误
+```
+❌ 设备已被激活
+❌ 可用席位不足  
+❌ 授权码已被禁用
+```
+
+### 配置选项
+
+在 `configs/app.yaml` 中可以配置日志行为：
+
+```yaml
+logging:
+  level: "debug"                # 日志级别
+  file: "./logs/app.log"        # 应用日志文件
+  enable_http_log: true         # 是否记录HTTP请求
+```
+
+错误日志文件自动生成为 `./logs/app_error.log`。
+
+### 最佳实践
+
+1. **处理器层**: 使用 `c.Error(err)` 统一交给中间件处理
+2. **服务层**: 在关键业务节点记录详细的上下文日志
+3. **前端**: 优先显示具体的错误消息，降级显示通用消息
+4. **监控**: 重点关注 `app_error.log` 中的系统错误
+5. **调试**: 查看 `app.log` 了解完整的业务流程
+
+### 技术优势
+
+相比传统的 Go 错误处理，该系统具有以下优势：
+
+1. **统一处理**: 类似其他语言的全局异常处理器
+2. **自动分类**: 根据错误类型自动选择日志级别和文件
+3. **上下文丰富**: 自动记录请求信息、用户信息等
+4. **前端友好**: 确保具体错误信息能正确传递到用户界面
+5. **运维友好**: 严重错误单独记录，便于监控和告警
+6. **开发友好**: 大大简化了处理器中的错误处理代码
+
 ## 安全特性
 
 ### 双因子认证 (TOTP)

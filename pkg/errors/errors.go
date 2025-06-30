@@ -67,15 +67,17 @@ var (
 	ErrTOTPForceEnabled   = NewAppError(40009, "系统已启用强制双因子认证，无法禁用")
 	ErrTOTPKeyNotSet      = NewAppError(40010, "TOTP密钥未设置")
 
-	// 授权相关错误 (41xxx)
-	ErrAuthCodeNotFound  = NewAppError(43001, "授权码不存在")
-	ErrAuthCodeDisabled  = NewAppError(41002, "授权码已被禁用")
-	ErrInvalidBindFile   = NewAppError(41003, "无效的绑定文件")
-	ErrInvalidUnbindFile = NewAppError(41004, "无效的解绑文件")
-	ErrInvalidSignature  = NewAppError(41005, "签名验证失败")
-	ErrInsufficientSeats = NewAppError(41006, "可用席位不足")
-	ErrDuplicateMachine  = NewAppError(41007, "设备已被激活")
-	ErrLicenseNotFound   = NewAppError(41008, "授权记录不存在")
+	// 业务逻辑错误 (40xxx) - 应该返回400 Bad Request
+	ErrAuthCodeDisabled  = NewAppError(40011, "授权码已被禁用")
+	ErrInvalidBindFile   = NewAppError(40012, "无效的绑定文件")
+	ErrInvalidUnbindFile = NewAppError(40013, "无效的解绑文件")
+	ErrInvalidSignature  = NewAppError(40014, "签名验证失败")
+	ErrInsufficientSeats = NewAppError(40015, "可用席位不足")
+	ErrDuplicateMachine  = NewAppError(40016, "设备已被激活")
+	ErrLicenseNotFound   = NewAppError(40017, "授权记录不存在")
+
+	// 资源不存在错误 (43xxx)
+	ErrAuthCodeNotFound = NewAppError(43001, "授权码不存在")
 
 	// 加密相关错误 (50xxx)
 	ErrCryptoError = NewAppError(50001, "加密操作失败")

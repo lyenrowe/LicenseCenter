@@ -48,6 +48,8 @@ func SetupRouter() *gin.Engine {
 		})
 	}))
 	r.Use(middleware.LoggingMiddleware(logger.GetLogger()))
+	r.Use(middleware.ErrorHandlerMiddleware())
+	r.Use(middleware.ErrorResponseHandler())
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

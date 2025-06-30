@@ -231,7 +231,23 @@ const activateDevices = async () => {
     bindFileList.value = []
     loadDashboard()
   } catch (error) {
-    ElMessage.error(error.response?.data?.error || '设备激活失败')
+    console.error('设备激活错误:', error)
+    
+    // 优先显示具体的错误信息
+    let errorMessage = '设备激活失败'
+    
+    if (error.message) {
+      // 如果是我们在API中处理过的业务错误
+      errorMessage = error.message
+    } else if (error.response?.data?.error) {
+      // 如果响应中有具体错误信息
+      errorMessage = error.response.data.error
+    } else if (error.response?.data?.message) {
+      // 备用：检查message字段
+      errorMessage = error.response.data.message
+    }
+    
+    ElMessage.error(errorMessage)
   } finally {
     activating.value = false
   }
@@ -259,7 +275,20 @@ const transferLicense = async () => {
     transferBindFile.value = null
     loadDashboard()
   } catch (error) {
-    ElMessage.error(error.response?.data?.error || '授权转移失败')
+    console.error('授权转移错误:', error)
+    
+    // 优先显示具体的错误信息
+    let errorMessage = '授权转移失败'
+    
+    if (error.message) {
+      errorMessage = error.message
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    }
+    
+    ElMessage.error(errorMessage)
   } finally {
     transferring.value = false
   }
@@ -278,7 +307,20 @@ const downloadLicense = async (licenseId) => {
     
     ElMessage.success('授权文件下载成功')
   } catch (error) {
-    ElMessage.error(error.response?.data?.error || '下载失败')
+    console.error('下载授权文件错误:', error)
+    
+    // 优先显示具体的错误信息
+    let errorMessage = '下载失败'
+    
+    if (error.message) {
+      errorMessage = error.message
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    }
+    
+    ElMessage.error(errorMessage)
   }
 }
 

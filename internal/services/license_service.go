@@ -12,7 +12,9 @@ import (
 	"github.com/lyenrowe/LicenseCenter/internal/models"
 	"github.com/lyenrowe/LicenseCenter/pkg/crypto"
 	"github.com/lyenrowe/LicenseCenter/pkg/errors"
+	"github.com/lyenrowe/LicenseCenter/pkg/logger"
 	"github.com/lyenrowe/LicenseCenter/pkg/utils"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -309,6 +311,15 @@ func (s *LicenseService) ActivateLicenses(authCode string, bindFiles []BindFile)
 		err := s.db.Where("machine_id = ? AND status = ?",
 			bindFile.MachineID, models.LicenseStatusActive).First(&existing).Error
 		if err == nil {
+			// 记录设备重复激活的错误日志
+			logger.GetLogger().Warn("设备重复激活被阻止",
+				zap.String("auth_code", auth.AuthorizationCode),
+				zap.String("machine_id", bindFile.MachineID),
+				zap.String("hostname", bindFile.Hostname),
+				zap.Uint("existing_license_id", existing.ID),
+				zap.Time("existing_activated_at", existing.ActivatedAt),
+				zap.String("customer_name", auth.CustomerName),
+			)
 			// 回滚已创建的授权
 			s.rollbackCreatedLicenses(createdLicenses)
 			return nil, errors.ErrDuplicateMachine
@@ -393,6 +404,16 @@ func (s *LicenseService) TransferLicense(authCode string, unbindFile UnbindFile,
 		err = tx.Where("machine_id = ? AND status = ?",
 			bindFile.MachineID, models.LicenseStatusActive).First(&existing).Error
 		if err == nil {
+			// 记录设备转移时的重复激活错误日志
+			logger.GetLogger().Warn("设备转移时发现目标机器已被激活",
+				zap.String("auth_code", auth.AuthorizationCode),
+				zap.String("old_machine_id", oldLicense.MachineID),
+				zap.String("new_machine_id", bindFile.MachineID),
+				zap.String("new_hostname", bindFile.Hostname),
+				zap.Uint("existing_license_id", existing.ID),
+				zap.Time("existing_activated_at", existing.ActivatedAt),
+				zap.String("customer_name", auth.CustomerName),
+			)
 			return errors.ErrDuplicateMachine
 		}
 		if err != gorm.ErrRecordNotFound {

@@ -1,14 +1,15 @@
 package handlers
 
 import (
-	"encoding/json"
+	"archive/zip"
+	"bytes"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/lyenrowe/LicenseCenter/internal/services"
-	"github.com/lyenrowe/LicenseCenter/pkg/errors"
 )
 
 // LicenseHandler 授权处理器
@@ -58,15 +59,17 @@ func (h *LicenseHandler) GetPublicKey(c *gin.Context) {
 
 // ActivateLicenses 批量激活设备
 func (h *LicenseHandler) ActivateLicenses(c *gin.Context) {
-	// 从JWT中获取用户信息
-	userID, exists := c.Get("user_id")
+	// 获取用户名（授权码）
+	username, exists := c.Get("username")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "用户未认证",
+			"error": "用户信息不完整",
 			"code":  40100,
 		})
 		return
 	}
+
+	authCode := username.(string)
 
 	// 解析上传的文件
 	form, err := c.MultipartForm()
@@ -87,8 +90,8 @@ func (h *LicenseHandler) ActivateLicenses(c *gin.Context) {
 		return
 	}
 
-	// 解析bind文件内容
-	var bindFileContents []services.BindFile
+	// 读取并解密bind文件内容
+	var encryptedBindFiles []string
 	for _, fileHeader := range bindFiles {
 		file, err := fileHeader.Open()
 		if err != nil {
@@ -110,26 +113,61 @@ func (h *LicenseHandler) ActivateLicenses(c *gin.Context) {
 			return
 		}
 
-		var bindFile services.BindFile
-		if err := json.Unmarshal(content, &bindFile); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "文件格式错误: " + fileHeader.Filename,
-				"code":  40000,
-			})
-			return
-		}
-		bindFileContents = append(bindFileContents, bindFile)
+		// 将文件内容作为加密数据处理
+		encryptedBindFiles = append(encryptedBindFiles, string(content))
 	}
 
-	// 激活设备 (临时使用现有方法，后续需要在service中实现)
-	// TODO: 需要在LicenseService中实现ActivateLicensesByUserID方法
-	_ = userID           // 避免未使用变量警告
-	_ = bindFileContents // 避免未使用变量警告
+	// 使用LicenseService的加密激活方法
+	encryptedLicenseFiles, err := h.licenseService.ActivateLicensesEncrypted(authCode, encryptedBindFiles)
+	if err != nil {
+		// 直接使用gin的Error方法，让错误处理中间件统一处理
+		c.Error(err)
+		return
+	}
 
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"error": "功能开发中",
-		"code":  50100,
-	})
+	// 创建ZIP文件包含所有license文件
+	zipBuffer, err := h.createLicenseZip(encryptedLicenseFiles)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "创建授权文件包失败",
+			"code":  50000,
+		})
+		return
+	}
+
+	// 返回ZIP文件
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", "attachment; filename=licenses.zip")
+	c.Header("Content-Length", fmt.Sprintf("%d", len(zipBuffer)))
+	c.Data(http.StatusOK, "application/zip", zipBuffer)
+}
+
+// createLicenseZip 创建包含所有license文件的ZIP包
+func (h *LicenseHandler) createLicenseZip(encryptedLicenseFiles []services.EncryptedFileResponse) ([]byte, error) {
+	var zipBuffer bytes.Buffer
+	zipWriter := zip.NewWriter(&zipBuffer)
+
+	for i, licenseFile := range encryptedLicenseFiles {
+		fileName := fmt.Sprintf("license_%d.license", i+1)
+		fileWriter, err := zipWriter.Create(fileName)
+		if err != nil {
+			zipWriter.Close()
+			return nil, err
+		}
+
+		_, err = fileWriter.Write([]byte(licenseFile.EncryptedContent))
+		if err != nil {
+			zipWriter.Close()
+			return nil, err
+		}
+	}
+
+	err := zipWriter.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return zipBuffer.Bytes(), nil
 }
 
 // TransferLicense 授权转移
@@ -198,17 +236,7 @@ func (h *LicenseHandler) GetLicensesByAuth(c *gin.Context) {
 
 	licenses, err := h.licenseService.GetLicensesByAuth(authCode)
 	if err != nil {
-		if appErr, ok := err.(*errors.AppError); ok {
-			c.JSON(appErr.HTTPStatus(), gin.H{
-				"error": appErr.Message,
-				"code":  appErr.Code,
-			})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "获取设备列表失败",
-				"code":  50000,
-			})
-		}
+		c.Error(err)
 		return
 	}
 
@@ -239,17 +267,7 @@ func (h *LicenseHandler) ForceUnbindLicense(c *gin.Context) {
 
 	err = h.licenseService.ForceUnbindLicense(uint(id), req.Reason)
 	if err != nil {
-		if appErr, ok := err.(*errors.AppError); ok {
-			c.JSON(appErr.HTTPStatus(), gin.H{
-				"error": appErr.Message,
-				"code":  appErr.Code,
-			})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "强制解绑失败",
-				"code":  50000,
-			})
-		}
+		c.Error(err)
 		return
 	}
 

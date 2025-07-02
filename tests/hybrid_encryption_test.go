@@ -175,8 +175,15 @@ func (suite *HybridEncryptionTestSuite) TestEncryptedTransferFlow() {
 
 	// 第二步：生成解绑文件
 	unbindFile := services.UnbindFile{
-		SignedLicense: licenseFiles[0],
-		UnbindProof:   "test-unbind-proof", // 实际应该是正确的签名
+		LicenseKey: licenseFiles[0].LicenseData.LicenseKey,
+		MachineID:  oldBindFile.MachineID,
+		UnbindMetadata: services.UnbindMetadata{
+			UnbindTime:    time.Now(),
+			Hostname:      oldBindFile.Hostname,
+			ClientVersion: "1.0.0",
+			UnbindReason:  "user_initiated",
+		},
+		UnbindProof: "test-unbind-proof", // 实际应该是正确的签名
 	}
 
 	// 加密解绑文件
@@ -197,7 +204,7 @@ func (suite *HybridEncryptionTestSuite) TestEncryptedTransferFlow() {
 	// 解密验证
 	decryptedUnbindFile, err := suite.licenseService.DecryptUnbindFile(encryptedUnbindFile.EncryptedContent)
 	assert.NoError(suite.T(), err)
-	assert.Equal(suite.T(), oldBindFile.MachineID, decryptedUnbindFile.SignedLicense.LicenseData.MachineID)
+	assert.Equal(suite.T(), oldBindFile.MachineID, decryptedUnbindFile.MachineID)
 
 	decryptedNewBindFile, err := suite.licenseService.DecryptBindFile(encryptedNewBindFile.EncryptedContent)
 	assert.NoError(suite.T(), err)

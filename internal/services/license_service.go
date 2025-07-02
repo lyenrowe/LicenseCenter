@@ -49,7 +49,9 @@ type LicenseFile struct {
 
 // LicenseData 授权数据结构
 type LicenseData struct {
+	LicenseKey       string    `json:"license_key"`
 	MachineID        string    `json:"machine_id"`
+	Hostname         string    `json:"hostname"`
 	IssuedAt         time.Time `json:"issued_at"`
 	ExpiresAt        time.Time `json:"expires_at"`
 	LicenseType      string    `json:"license_type"`
@@ -58,8 +60,18 @@ type LicenseData struct {
 
 // UnbindFile 解绑文件结构
 type UnbindFile struct {
-	SignedLicense LicenseFile `json:"signed_license"`
-	UnbindProof   string      `json:"unbind_proof"`
+	LicenseKey     string         `json:"license_key"`
+	MachineID      string         `json:"machine_id"`
+	UnbindMetadata UnbindMetadata `json:"unbind_metadata"`
+	UnbindProof    string         `json:"unbind_proof"`
+}
+
+// UnbindMetadata 解绑元数据
+type UnbindMetadata struct {
+	UnbindTime    time.Time `json:"unbind_time"`
+	Hostname      string    `json:"hostname"`
+	ClientVersion string    `json:"client_version"`
+	UnbindReason  string    `json:"unbind_reason"`
 }
 
 // EncryptedFileResponse 加密文件响应结构
@@ -530,21 +542,10 @@ func (s *LicenseService) validateBindFile(bindFile *BindFile) error {
 
 // validateUnbindFile 验证解绑文件
 func (s *LicenseService) validateUnbindFile(unbindFile *UnbindFile) (*models.License, error) {
-	// 验证主签名
-	licenseData, err := json.Marshal(unbindFile.SignedLicense.LicenseData)
-	if err != nil {
-		return nil, errors.ErrInvalidUnbindFile
-	}
-
-	err = s.rsaService.VerifySignature(licenseData, unbindFile.SignedLicense.Signature)
-	if err != nil {
-		return nil, errors.ErrInvalidSignature
-	}
-
-	// 根据机器ID查找授权记录
+	// 根据license_key查找授权记录
 	var license models.License
-	err = s.db.Where("machine_id = ? AND status = ?",
-		unbindFile.SignedLicense.LicenseData.MachineID,
+	err := s.db.Where("license_key = ? AND status = ?",
+		unbindFile.LicenseKey,
 		models.LicenseStatusActive).First(&license).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -553,11 +554,17 @@ func (s *LicenseService) validateUnbindFile(unbindFile *UnbindFile) (*models.Lic
 		return nil, errors.WrapError(err, 50001, "查找授权记录失败")
 	}
 
-	// 验证解绑证明
-	signedLicenseData, err := json.Marshal(unbindFile.SignedLicense)
-	if err != nil {
-		return nil, errors.ErrInvalidUnbindFile
+	// 验证机器ID是否匹配
+	if license.MachineID != unbindFile.MachineID {
+		return nil, errors.NewAppError(41004, "机器ID不匹配")
 	}
+
+	// 构造需要验证签名的数据
+	signData := fmt.Sprintf("%s:%s:%s:%s",
+		unbindFile.LicenseKey,
+		unbindFile.MachineID,
+		unbindFile.UnbindMetadata.UnbindTime.Format(time.RFC3339),
+		unbindFile.UnbindMetadata.Hostname)
 
 	// 使用一次性解绑公钥验证
 	unbindPublicKey, err := crypto.LoadPublicKeyFromPEM(license.UnbindPublicKey)
@@ -565,7 +572,7 @@ func (s *LicenseService) validateUnbindFile(unbindFile *UnbindFile) (*models.Lic
 		return nil, errors.WrapError(err, 50002, "解析解绑公钥失败")
 	}
 
-	err = crypto.VerifySignature(unbindPublicKey, signedLicenseData, unbindFile.UnbindProof)
+	err = crypto.VerifySignature(unbindPublicKey, []byte(signData), unbindFile.UnbindProof)
 	if err != nil {
 		return nil, errors.ErrInvalidSignature
 	}
@@ -597,10 +604,15 @@ func (s *LicenseService) generateLicenseFileWithExpiry(auth *models.Authorizatio
 		return nil, nil, errors.WrapError(err, 50002, "转换解绑公钥失败")
 	}
 
-	// 创建授权数据
+	// 生成授权记录的唯一标识
 	now := time.Now()
+	licenseKey := s.generateLicenseKey(bindFile.MachineID, now)
+
+	// 创建授权数据
 	licenseData := LicenseData{
+		LicenseKey:       licenseKey,
 		MachineID:        bindFile.MachineID,
+		Hostname:         bindFile.Hostname,
 		IssuedAt:         now,
 		ExpiresAt:        expiresAt,
 		LicenseType:      "FULL",
@@ -623,9 +635,6 @@ func (s *LicenseService) generateLicenseFileWithExpiry(auth *models.Authorizatio
 		LicenseData: licenseData,
 		Signature:   signature,
 	}
-
-	// 生成授权记录的唯一标识
-	licenseKey := s.generateLicenseKey(bindFile.MachineID, now)
 
 	// 创建数据库记录
 	license := &models.License{
@@ -721,7 +730,9 @@ func (s *LicenseService) RegenerateLicenseFile(licenseID uint, userID interface{
 
 	// 创建license数据
 	licenseData := LicenseData{
+		LicenseKey:       license.LicenseKey,
 		MachineID:        license.MachineID,
+		Hostname:         license.Hostname,
 		IssuedAt:         license.IssuedAt,
 		ExpiresAt:        license.ExpiresAt,
 		LicenseType:      "FULL",

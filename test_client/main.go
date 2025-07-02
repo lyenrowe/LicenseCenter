@@ -29,7 +29,9 @@ type LicenseFile struct {
 
 // LicenseData 授权数据结构
 type LicenseData struct {
+	LicenseKey       string    `json:"license_key"`
 	MachineID        string    `json:"machine_id"`
+	Hostname         string    `json:"hostname"`
 	IssuedAt         time.Time `json:"issued_at"`
 	ExpiresAt        time.Time `json:"expires_at"`
 	LicenseType      string    `json:"license_type"`
@@ -38,8 +40,18 @@ type LicenseData struct {
 
 // UnbindFile 解绑文件结构
 type UnbindFile struct {
-	SignedLicense LicenseFile `json:"signed_license"`
-	UnbindProof   string      `json:"unbind_proof"`
+	LicenseKey     string         `json:"license_key"`
+	MachineID      string         `json:"machine_id"`
+	UnbindMetadata UnbindMetadata `json:"unbind_metadata"`
+	UnbindProof    string         `json:"unbind_proof"`
+}
+
+// UnbindMetadata 解绑元数据
+type UnbindMetadata struct {
+	UnbindTime    time.Time `json:"unbind_time"`
+	Hostname      string    `json:"hostname"`
+	ClientVersion string    `json:"client_version"`
+	UnbindReason  string    `json:"unbind_reason"`
 }
 
 // PublicKeyResponse 公钥响应
@@ -344,40 +356,53 @@ func generateUnbindFile(licenseFilePath string) {
 		return
 	}
 
-	// 5. 对整个授权文件进行签名
-	licenseDataBytes, err := json.Marshal(licenseFile)
-	if err != nil {
-		fmt.Printf("❌ 序列化授权文件失败: %v\n", err)
-		return
+	// 5. 获取主机名
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "unknown"
 	}
 
-	unbindProof, err := crypto.SignData(unbindPrivateKey, licenseDataBytes)
+	// 6. 创建解绑元数据
+	unbindMetadata := UnbindMetadata{
+		UnbindTime:    time.Now().UTC(),
+		Hostname:      hostname,
+		ClientVersion: "1.0.0",
+		UnbindReason:  "user_initiated",
+	}
+
+	// 7. 构造需要签名的数据
+	signData := fmt.Sprintf("%s:%s:%s:%s",
+		licenseFile.LicenseData.LicenseKey,
+		licenseFile.LicenseData.MachineID,
+		unbindMetadata.UnbindTime.Format(time.RFC3339),
+		unbindMetadata.Hostname)
+
+	// 8. 生成解绑证明
+	unbindProof, err := crypto.SignData(unbindPrivateKey, []byte(signData))
 	if err != nil {
 		fmt.Printf("❌ 生成解绑证明失败: %v\n", err)
 		return
 	}
 
-	// 6. 创建解绑文件
+	// 9. 创建解绑文件
 	unbindFile := UnbindFile{
-		SignedLicense: licenseFile,
-		UnbindProof:   unbindProof,
+		LicenseKey:     licenseFile.LicenseData.LicenseKey,
+		MachineID:      licenseFile.LicenseData.MachineID,
+		UnbindMetadata: unbindMetadata,
+		UnbindProof:    unbindProof,
 	}
 
-	// 7. 序列化解绑文件
+	// 10. 序列化解绑文件
 	unbindData, err := json.MarshalIndent(unbindFile, "", "  ")
 	if err != nil {
 		fmt.Printf("❌ 序列化解绑文件失败: %v\n", err)
 		return
 	}
 
-	// 8. 生成文件名
-	hostname, _ := os.Hostname()
-	if hostname == "" {
-		hostname = "unknown"
-	}
+	// 11. 生成文件名
 	fileName := fmt.Sprintf("%s.unbind", hostname)
 
-	// 9. 写入文件
+	// 12. 写入文件
 	err = os.WriteFile(fileName, unbindData, 0644)
 	if err != nil {
 		fmt.Printf("❌ 写入解绑文件失败: %v\n", err)
@@ -392,7 +417,9 @@ func generateUnbindFile(licenseFilePath string) {
 func displayLicenseInfo(licenseFile LicenseFile) {
 	fmt.Println("📋 授权文件信息:")
 	fmt.Println("================")
+	fmt.Printf("授权密钥: %s\n", licenseFile.LicenseData.LicenseKey)
 	fmt.Printf("机器ID: %s\n", licenseFile.LicenseData.MachineID)
+	fmt.Printf("主机名: %s\n", licenseFile.LicenseData.Hostname)
 	fmt.Printf("颁发时间: %s\n", licenseFile.LicenseData.IssuedAt.Format("2006-01-02 15:04:05"))
 	fmt.Printf("到期时间: %s\n", licenseFile.LicenseData.ExpiresAt.Format("2006-01-02 15:04:05"))
 	fmt.Printf("授权类型: %s\n", licenseFile.LicenseData.LicenseType)

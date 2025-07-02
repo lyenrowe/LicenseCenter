@@ -33,7 +33,9 @@ type LicenseFile struct {
 
 // LicenseData 授权数据结构
 type LicenseData struct {
+	LicenseKey       string    `json:"license_key"`
 	MachineID        string    `json:"machine_id"`
+	Hostname         string    `json:"hostname"`
 	IssuedAt         time.Time `json:"issued_at"`
 	ExpiresAt        time.Time `json:"expires_at"`
 	LicenseType      string    `json:"license_type"`
@@ -42,8 +44,18 @@ type LicenseData struct {
 
 // UnbindFile 解绑文件结构
 type UnbindFile struct {
-	SignedLicense LicenseFile `json:"signed_license"`
-	UnbindProof   string      `json:"unbind_proof"`
+	LicenseKey     string         `json:"license_key"`
+	MachineID      string         `json:"machine_id"`
+	UnbindMetadata UnbindMetadata `json:"unbind_metadata"`
+	UnbindProof    string         `json:"unbind_proof"`
+}
+
+// UnbindMetadata 解绑元数据
+type UnbindMetadata struct {
+	UnbindTime    time.Time `json:"unbind_time"`
+	Hostname      string    `json:"hostname"`
+	ClientVersion string    `json:"client_version"`
+	UnbindReason  string    `json:"unbind_reason"`
 }
 
 // PublicKeyResponse 公钥响应结构
@@ -170,8 +182,11 @@ func generateLicenseFile() {
 	// 创建授权数据
 	now := time.Now().UTC()
 	expiresAt := now.AddDate(1, 0, 0) // 1年后过期
+	licenseKey := fmt.Sprintf("LIC-%s-%d", machineID[:8], now.Unix())
 	licenseData := LicenseData{
+		LicenseKey:       licenseKey,
 		MachineID:        machineID,
+		Hostname:         hostname,
 		IssuedAt:         now,
 		ExpiresAt:        expiresAt,
 		LicenseType:      "FULL",
@@ -209,40 +224,18 @@ func generateUnbindFile() {
 	hostname := generateTestHostname(0)
 	machineID := generateTestMachineID(hostname, 0)
 
-	// 生成解绑密钥对
-	unbindKeyPair, err := crypto.GenerateRSAKeyPair(2048)
-	if err != nil {
-		fmt.Printf("❌ 生成解绑密钥对失败: %v\n", err)
-		return
-	}
-
-	unbindPrivateKeyPEM, err := unbindKeyPair.PrivateKeyToPEM()
-	if err != nil {
-		fmt.Printf("❌ 转换解绑私钥失败: %v\n", err)
-		return
-	}
-
-	// 创建授权数据
+	// 生成测试用的license_key
 	now := time.Now().UTC()
-	licenseData := LicenseData{
-		MachineID:        machineID,
-		IssuedAt:         now,
-		ExpiresAt:        now.AddDate(1, 0, 0),
-		LicenseType:      "FULL",
-		UnbindPrivateKey: unbindPrivateKeyPEM,
-	}
-
-	licenseFile := LicenseFile{
-		LicenseData: licenseData,
-		Signature:   generateTestSignature(machineID),
-	}
+	licenseKey := fmt.Sprintf("LIC-%s-%d", machineID[:8], now.Unix())
 
 	// 生成解绑证明（模拟签名）
 	unbindProof := generateTestSignature(machineID + "-unbind")
 
 	unbindFile := UnbindFile{
-		SignedLicense: licenseFile,
-		UnbindProof:   unbindProof,
+		LicenseKey:     licenseKey,
+		MachineID:      machineID,
+		UnbindMetadata: UnbindMetadata{UnbindTime: now, Hostname: hostname, ClientVersion: "1.0.0", UnbindReason: "Test"},
+		UnbindProof:    unbindProof,
 	}
 
 	// 保存文件
@@ -305,8 +298,11 @@ func generateAllFiles() {
 	}
 
 	now := time.Now().UTC()
+	licenseKey := fmt.Sprintf("LIC-%s-%d", machineID[:8], now.Unix())
 	licenseData := LicenseData{
+		LicenseKey:       licenseKey,
 		MachineID:        machineID,
+		Hostname:         hostname,
 		IssuedAt:         now,
 		ExpiresAt:        now.AddDate(1, 0, 0),
 		LicenseType:      "FULL",
@@ -331,8 +327,10 @@ func generateAllFiles() {
 	// 3. 生成unbind文件
 	fmt.Println("3️⃣  生成 .unbind 文件...")
 	unbindFile := UnbindFile{
-		SignedLicense: licenseFile,
-		UnbindProof:   generateTestSignature(machineID + "-unbind"),
+		LicenseKey:     licenseKey,
+		MachineID:      machineID,
+		UnbindMetadata: UnbindMetadata{UnbindTime: now, Hostname: hostname, ClientVersion: "1.0.0", UnbindReason: "Test"},
+		UnbindProof:    generateTestSignature(machineID + "-unbind"),
 	}
 
 	if err := saveUnbindFile(unbindFile, hostname, false); err != nil {

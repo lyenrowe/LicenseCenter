@@ -3,3 +3,4 @@ logs/
 uploads/
 web/node_modules/
 bin/
+test_data/

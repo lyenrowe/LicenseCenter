@@ -22,6 +22,13 @@ func NewRSAService() *RSAService {
 	}
 }
 
+// WithDB 创建使用指定数据库连接的RSA服务实例
+func (s *RSAService) WithDB(db *gorm.DB) *RSAService {
+	return &RSAService{
+		db: db,
+	}
+}
+
 // GetActiveKeyPair 获取当前活跃的RSA密钥对
 func (s *RSAService) GetActiveKeyPair() (*rsa.PrivateKey, *rsa.PublicKey, error) {
 	var rsaKey models.RSAKey

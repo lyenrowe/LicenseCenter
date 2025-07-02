@@ -395,8 +395,8 @@ func (s *LicenseService) TransferLicense(authCode string, unbindFile UnbindFile,
 
 	// 开始事务
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		// 验证解绑文件
-		oldLicense, err := s.validateUnbindFile(&unbindFile)
+		// 验证解绑文件（传入事务tx）
+		oldLicense, err := s.validateUnbindFileWithDB(tx, &unbindFile)
 		if err != nil {
 			return err
 		}
@@ -440,7 +440,7 @@ func (s *LicenseService) TransferLicense(authCode string, unbindFile UnbindFile,
 		}
 
 		// 生成新授权文件（继承旧授权的到期时间）
-		licenseFile, license, err := s.generateLicenseFileWithExpiry(auth, &bindFile, oldLicense.ExpiresAt)
+		licenseFile, license, err := s.generateLicenseFileWithExpiryAndDB(auth, &bindFile, oldLicense.ExpiresAt, tx)
 		if err != nil {
 			return err
 		}
@@ -540,11 +540,16 @@ func (s *LicenseService) validateBindFile(bindFile *BindFile) error {
 	return nil
 }
 
-// validateUnbindFile 验证解绑文件
+// validateUnbindFile 验证解绑文件（使用默认数据库连接）
 func (s *LicenseService) validateUnbindFile(unbindFile *UnbindFile) (*models.License, error) {
+	return s.validateUnbindFileWithDB(s.db, unbindFile)
+}
+
+// validateUnbindFileWithDB 验证解绑文件（可指定数据库连接）
+func (s *LicenseService) validateUnbindFileWithDB(db *gorm.DB, unbindFile *UnbindFile) (*models.License, error) {
 	// 根据license_key查找授权记录
 	var license models.License
-	err := s.db.Where("license_key = ? AND status = ?",
+	err := db.Where("license_key = ? AND status = ?",
 		unbindFile.LicenseKey,
 		models.LicenseStatusActive).First(&license).Error
 	if err != nil {
@@ -588,6 +593,11 @@ func (s *LicenseService) generateLicenseFile(auth *models.Authorization, bindFil
 
 // generateLicenseFileWithExpiry 生成带指定到期时间的授权文件
 func (s *LicenseService) generateLicenseFileWithExpiry(auth *models.Authorization, bindFile *BindFile, expiresAt time.Time) (*LicenseFile, *models.License, error) {
+	return s.generateLicenseFileWithExpiryAndDB(auth, bindFile, expiresAt, nil)
+}
+
+// generateLicenseFileWithExpiryAndDB 生成带指定到期时间的授权文件（支持事务）
+func (s *LicenseService) generateLicenseFileWithExpiryAndDB(auth *models.Authorization, bindFile *BindFile, expiresAt time.Time, db *gorm.DB) (*LicenseFile, *models.License, error) {
 	// 生成一次性解绑密钥对
 	unbindKeyPair, err := crypto.GenerateRSAKeyPair(2048)
 	if err != nil {
@@ -625,7 +635,14 @@ func (s *LicenseService) generateLicenseFileWithExpiry(auth *models.Authorizatio
 		return nil, nil, errors.WrapError(err, 50002, "序列化授权数据失败")
 	}
 
-	signature, err := s.rsaService.SignData(licenseDataBytes)
+	// 如果提供了数据库连接（在事务中），使用该连接的RSA服务
+	var signature string
+	if db != nil {
+		rsaServiceWithDB := s.rsaService.WithDB(db)
+		signature, err = rsaServiceWithDB.SignData(licenseDataBytes)
+	} else {
+		signature, err = s.rsaService.SignData(licenseDataBytes)
+	}
 	if err != nil {
 		return nil, nil, err
 	}

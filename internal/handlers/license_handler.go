@@ -173,14 +173,16 @@ func (h *LicenseHandler) createLicenseZip(encryptedLicenseFiles []services.Encry
 // TransferLicense 授权转移
 func (h *LicenseHandler) TransferLicense(c *gin.Context) {
 	// 从JWT中获取用户信息
-	userID, exists := c.Get("user_id")
+	username, exists := c.Get("username")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "用户未认证",
+			"error": "用户信息不完整",
 			"code":  40100,
 		})
 		return
 	}
+
+	authCode := username.(string)
 
 	// 解析上传的文件
 	form, err := c.MultipartForm()
@@ -212,15 +214,64 @@ func (h *LicenseHandler) TransferLicense(c *gin.Context) {
 		return
 	}
 
-	// TODO: 解析文件内容并调用service方法
-	_ = userID      // 避免未使用变量警告
-	_ = unbindFiles // 避免未使用变量警告
-	_ = bindFiles   // 避免未使用变量警告
+	// 读取unbind文件内容
+	unbindFile, err := unbindFiles[0].Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "无法读取解绑文件",
+			"code":  40000,
+		})
+		return
+	}
+	defer unbindFile.Close()
 
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"error": "功能开发中",
-		"code":  50100,
-	})
+	unbindContent := make([]byte, unbindFiles[0].Size)
+	_, err = unbindFile.Read(unbindContent)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "读取解绑文件内容失败",
+			"code":  40000,
+		})
+		return
+	}
+
+	// 读取bind文件内容
+	bindFile, err := bindFiles[0].Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "无法读取绑定文件",
+			"code":  40000,
+		})
+		return
+	}
+	defer bindFile.Close()
+
+	bindContent := make([]byte, bindFiles[0].Size)
+	_, err = bindFile.Read(bindContent)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "读取绑定文件内容失败",
+			"code":  40000,
+		})
+		return
+	}
+
+	// 调用服务层方法执行授权转移
+	encryptedLicenseFile, err := h.licenseService.TransferLicenseEncrypted(
+		authCode,
+		string(unbindContent),
+		string(bindContent),
+	)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	// 返回新的license文件
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Disposition", "attachment; filename=transferred.license")
+	c.Header("Content-Length", fmt.Sprintf("%d", len(encryptedLicenseFile.EncryptedContent)))
+	c.Data(http.StatusOK, "application/octet-stream", []byte(encryptedLicenseFile.EncryptedContent))
 }
 
 // GetLicensesByAuth 获取授权码下的设备列表

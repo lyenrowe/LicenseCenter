@@ -243,6 +243,28 @@ func (s *AuthorizationService) ConsumeSeats(authID uint, count int) error {
 	return nil
 }
 
+// ConsumeSeatsWithDB 在指定数据库连接中消耗席位（支持事务）
+func (s *AuthorizationService) ConsumeSeatsWithDB(db *gorm.DB, authID uint, count int) error {
+	// 先检查可用席位
+	var auth models.Authorization
+	err := db.First(&auth, authID).Error
+	if err != nil {
+		return err
+	}
+
+	if !auth.HasAvailableSeats(count) {
+		return errors.ErrInsufficientSeats
+	}
+
+	// 直接更新使用的席位数
+	err = db.Model(&auth).Update("used_seats", gorm.Expr("used_seats + ?", count)).Error
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // ReleaseSeats 释放席位
 func (s *AuthorizationService) ReleaseSeats(authID uint, count int) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {

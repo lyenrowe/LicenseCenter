@@ -307,80 +307,64 @@ func (s *LicenseService) ActivateLicenses(authCode string, bindFiles []BindFile)
 	}
 
 	var licenseFiles []LicenseFile
-	var createdLicenses []uint
 
-	// 逐个处理绑定文件（不使用事务避免锁定问题）
-	for _, bindFile := range bindFiles {
-		// 验证绑定文件
-		if err := s.validateBindFile(&bindFile); err != nil {
-			// 回滚已创建的授权
-			s.rollbackCreatedLicenses(createdLicenses)
-			return nil, err
+	// 使用事务确保批量操作的原子性
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		for _, bindFile := range bindFiles {
+			// 验证绑定文件
+			if err := s.validateBindFile(&bindFile); err != nil {
+				return err
+			}
+
+			// 检查机器是否已经激活
+			var existing models.License
+			err := tx.Where("machine_id = ? AND status = ?",
+				bindFile.MachineID, models.LicenseStatusActive).First(&existing).Error
+			if err == nil {
+				// 记录设备重复激活的错误日志
+				logger.GetLogger().Warn("设备重复激活被阻止",
+					zap.String("auth_code", auth.AuthorizationCode),
+					zap.String("machine_id", bindFile.MachineID),
+					zap.String("hostname", bindFile.Hostname),
+					zap.Uint("existing_license_id", existing.ID),
+					zap.Time("existing_activated_at", existing.ActivatedAt),
+					zap.String("customer_name", auth.CustomerName),
+				)
+				return errors.ErrDuplicateMachine
+			}
+			if err != gorm.ErrRecordNotFound {
+				return errors.WrapError(err, 50001, "检查机器状态失败")
+			}
+
+			// 生成授权文件（在事务中）
+			licenseFile, license, err := s.generateLicenseFileWithExpiryAndDB(auth, &bindFile, auth.CalculateExpiryDate(), tx)
+			if err != nil {
+				return err
+			}
+
+			// 保存到数据库
+			err = tx.Create(license).Error
+			if err != nil {
+				return errors.WrapError(err, 50001, "保存授权记录失败")
+			}
+
+			licenseFiles = append(licenseFiles, *licenseFile)
 		}
 
-		// 检查机器是否已经激活
-		var existing models.License
-		err := s.db.Where("machine_id = ? AND status = ?",
-			bindFile.MachineID, models.LicenseStatusActive).First(&existing).Error
-		if err == nil {
-			// 记录设备重复激活的错误日志
-			logger.GetLogger().Warn("设备重复激活被阻止",
-				zap.String("auth_code", auth.AuthorizationCode),
-				zap.String("machine_id", bindFile.MachineID),
-				zap.String("hostname", bindFile.Hostname),
-				zap.Uint("existing_license_id", existing.ID),
-				zap.Time("existing_activated_at", existing.ActivatedAt),
-				zap.String("customer_name", auth.CustomerName),
-			)
-			// 回滚已创建的授权
-			s.rollbackCreatedLicenses(createdLicenses)
-			return nil, errors.ErrDuplicateMachine
-		}
-		if err != gorm.ErrRecordNotFound {
-			// 回滚已创建的授权
-			s.rollbackCreatedLicenses(createdLicenses)
-			return nil, errors.WrapError(err, 50001, "检查机器状态失败")
-		}
-
-		// 生成授权文件
-		licenseFile, license, err := s.generateLicenseFile(auth, &bindFile)
+		// 在事务中消耗席位
+		err := s.authService.ConsumeSeatsWithDB(tx, auth.ID, len(bindFiles))
 		if err != nil {
-			// 回滚已创建的授权
-			s.rollbackCreatedLicenses(createdLicenses)
-			return nil, err
+			return err
 		}
 
-		// 保存到数据库
-		err = s.db.Create(license).Error
-		if err != nil {
-			// 回滚已创建的授权
-			s.rollbackCreatedLicenses(createdLicenses)
-			return nil, errors.WrapError(err, 50001, "保存授权记录失败")
-		}
+		return nil
+	})
 
-		createdLicenses = append(createdLicenses, license.ID)
-		licenseFiles = append(licenseFiles, *licenseFile)
-	}
-
-	// 最后消耗席位
-	err = s.authService.ConsumeSeats(auth.ID, len(bindFiles))
 	if err != nil {
-		// 回滚已创建的授权
-		s.rollbackCreatedLicenses(createdLicenses)
 		return nil, err
 	}
 
 	return licenseFiles, nil
-}
-
-// rollbackCreatedLicenses 回滚已创建的授权记录
-func (s *LicenseService) rollbackCreatedLicenses(licenseIDs []uint) {
-	if len(licenseIDs) == 0 {
-		return
-	}
-
-	// 删除已创建的授权记录
-	s.db.Where("id IN ?", licenseIDs).Delete(&models.License{})
 }
 
 // TransferLicense 授权转移

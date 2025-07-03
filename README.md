@@ -146,22 +146,36 @@ make init-system
 - `GET /health` - 健康检查
 - `GET /api/public-key` - 获取服务端公钥
 - `POST /api/admin/login` - 管理员登录
+- `POST /api/login` - 客户端登录
+- `GET /api/captcha/config` - 获取验证码配置
 
-### 客户端接口
+### 客户端接口（需要JWT认证）
 
-- `POST /api/licenses/activate` - 批量激活设备
-- `POST /api/licenses/transfer` - 授权转移
-- `GET /api/licenses?auth_code=xxx` - 查询设备列表
+- `POST /api/actions/activate-licenses` - 批量激活设备
+- `POST /api/actions/transfer-license` - 授权转移
+- `GET /api/client/dashboard` - 客户端控制台（包含设备列表）
+- `GET /api/licenses/:id/download` - 下载license文件
+- `POST /api/logout` - 客户端登出
 
 ### 管理员接口（需要JWT认证）
 
 - `GET /api/admin/dashboard` - 管理员控制台
+- `POST /api/admin/logout` - 管理员登出
 - `POST /api/admin/authorizations` - 创建授权码
 - `GET /api/admin/authorizations` - 授权码列表
+- `GET /api/admin/authorizations/:id/details` - 获取授权码详情（包含设备列表）
 - `PUT /api/admin/authorizations/:id` - 更新授权码
 - `DELETE /api/admin/authorizations/:id` - 删除授权码
-- `DELETE /api/admin/licenses/:id/unbind` - 强制解绑设备
+- `POST /api/admin/licenses/:id/force-unbind` - 强制解绑设备
 - `GET /api/admin/logs` - 查看操作日志
+- `POST /api/admin/admins` - 创建管理员
+- `GET /api/admin/admins` - 管理员列表
+- `PUT /api/admin/admins/:id` - 更新管理员
+- `DELETE /api/admin/admins/:id` - 删除管理员
+- `POST /api/admin/totp/enable/:id` - 启用双因子认证
+- `POST /api/admin/totp/disable/:id` - 禁用双因子认证
+- `GET /api/admin/totp/info/:id` - 获取双因子认证设置信息
+- `POST /api/admin/totp/verify/:id` - 验证双因子认证设置
 
 ## 🔐 安全机制
 

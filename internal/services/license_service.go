@@ -1,7 +1,12 @@
 package services
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -82,8 +87,8 @@ type EncryptedFileResponse struct {
 
 // ActivateLicensesEncrypted 批量激活设备（返回加密文件）
 func (s *LicenseService) ActivateLicensesEncrypted(authCode string, encryptedBindFiles []string) ([]EncryptedFileResponse, error) {
-	// 1. 解密绑定文件
-	bindFiles, err := s.DecryptBindFiles(encryptedBindFiles)
+	// 1. 解密绑定文件，同时提取客户端AES密钥
+	bindFiles, clientAESKeys, err := s.DecryptBindFilesAndExtractAESKeys(encryptedBindFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -94,10 +99,14 @@ func (s *LicenseService) ActivateLicensesEncrypted(authCode string, encryptedBin
 		return nil, err
 	}
 
-	// 3. 加密授权文件
-	encryptedLicenseFiles, err := s.EncryptLicenseFiles(licenseFiles)
-	if err != nil {
-		return nil, err
+	// 3. 使用对应的客户端AES密钥加密每个授权文件
+	var encryptedLicenseFiles []EncryptedFileResponse
+	for i, licenseFile := range licenseFiles {
+		encryptedFile, err := s.EncryptLicenseFileWithClientAES(licenseFile, clientAESKeys[i])
+		if err != nil {
+			return nil, err
+		}
+		encryptedLicenseFiles = append(encryptedLicenseFiles, *encryptedFile)
 	}
 
 	return encryptedLicenseFiles, nil
@@ -116,14 +125,31 @@ func (s *LicenseService) TransferLicenseEncrypted(authCode string, encryptedUnbi
 		return nil, err
 	}
 
-	// 2. 执行授权转移
+	// 2. 从解密过程中提取新设备的AES密钥
+	privateKey, _, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	_, newDeviceAESKey, err := s.decryptFileAndExtractAESKey(privateKey, encryptedBindFile)
+	if err != nil {
+		return nil, errors.WrapError(err, 41003, "提取新设备AES密钥失败")
+	}
+
+	// 验证AES密钥与机器ID匹配
+	expectedAESKey := crypto.GenerateClientAESKey(bindFile.MachineID)
+	if !bytes.Equal(newDeviceAESKey, expectedAESKey) {
+		return nil, errors.NewAppError(41003, "新设备AES密钥与机器ID不匹配")
+	}
+
+	// 3. 执行授权转移
 	newLicenseFile, err := s.TransferLicense(authCode, *unbindFile, *bindFile)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. 加密新的授权文件
-	encryptedLicenseFile, err := s.EncryptLicenseFile(*newLicenseFile)
+	// 4. 使用新设备的AES密钥加密新的授权文件
+	encryptedLicenseFile, err := s.EncryptLicenseFileWithClientAES(*newLicenseFile, newDeviceAESKey)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +180,78 @@ func (s *LicenseService) DecryptBindFiles(encryptedBindFiles []string) ([]BindFi
 	}
 
 	return bindFiles, nil
+}
+
+// DecryptBindFilesAndExtractAESKeys 解密绑定文件并从解密过程中提取客户端AES密钥
+func (s *LicenseService) DecryptBindFilesAndExtractAESKeys(encryptedBindFiles []string) ([]BindFile, [][]byte, error) {
+	privateKey, _, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var bindFiles []BindFile
+	var clientAESKeys [][]byte
+
+	for i, encryptedData := range encryptedBindFiles {
+		// 解密并提取AES密钥
+		jsonData, aesKey, err := s.decryptFileAndExtractAESKey(privateKey, encryptedData)
+		if err != nil {
+			return nil, nil, errors.WrapError(err, 41003, fmt.Sprintf("解密第%d个绑定文件失败", i+1))
+		}
+
+		var bindFile BindFile
+		if err := json.Unmarshal(jsonData, &bindFile); err != nil {
+			return nil, nil, errors.WrapError(err, 41003, fmt.Sprintf("解析第%d个绑定文件失败", i+1))
+		}
+
+		// 验证提取的AES密钥是否与机器ID匹配
+		expectedAESKey := crypto.GenerateClientAESKey(bindFile.MachineID)
+		if !bytes.Equal(aesKey, expectedAESKey) {
+			return nil, nil, errors.NewAppError(41003, fmt.Sprintf("第%d个绑定文件的AES密钥与机器ID不匹配", i+1))
+		}
+
+		bindFiles = append(bindFiles, bindFile)
+		clientAESKeys = append(clientAESKeys, aesKey)
+	}
+
+	return bindFiles, clientAESKeys, nil
+}
+
+// decryptFileAndExtractAESKey 解密文件并提取其中的AES密钥
+func (s *LicenseService) decryptFileAndExtractAESKey(privateKey *rsa.PrivateKey, base64Data string) ([]byte, []byte, error) {
+	// Base64解码
+	encryptedData, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Base64解码失败: %w", err)
+	}
+
+	if len(encryptedData) < 4 {
+		return nil, nil, fmt.Errorf("加密数据格式错误：数据太短")
+	}
+
+	// 解析数据格式：读取AES密钥长度
+	keyLen := binary.BigEndian.Uint32(encryptedData[0:4])
+	if len(encryptedData) < int(4+keyLen) {
+		return nil, nil, fmt.Errorf("加密数据格式错误：AES密钥数据不完整")
+	}
+
+	// 提取RSA加密的AES密钥和AES加密的数据
+	encryptedAESKey := encryptedData[4 : 4+keyLen]
+	aesEncryptedData := encryptedData[4+keyLen:]
+
+	// 使用RSA解密AES密钥
+	aesKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, encryptedAESKey, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("RSA解密AES密钥失败: %w", err)
+	}
+
+	// 使用AES解密数据
+	jsonData, err := crypto.AESGCMDecrypt(aesEncryptedData, aesKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("AES解密数据失败: %w", err)
+	}
+
+	return jsonData, aesKey, nil
 }
 
 // DecryptBindFile 解密单个绑定文件
@@ -224,7 +322,7 @@ func (s *LicenseService) EncryptLicenseFiles(licenseFiles []LicenseFile) ([]Encr
 	return encryptedFiles, nil
 }
 
-// EncryptLicenseFile 加密单个授权文件
+// EncryptLicenseFile 加密单个授权文件（使用服务端公钥，旧方法）
 func (s *LicenseService) EncryptLicenseFile(licenseFile LicenseFile) (*EncryptedFileResponse, error) {
 	_, publicKey, err := s.rsaService.GetActiveKeyPair()
 	if err != nil {
@@ -247,7 +345,33 @@ func (s *LicenseService) EncryptLicenseFile(licenseFile LicenseFile) (*Encrypted
 	}, nil
 }
 
-// EncryptBindFile 加密绑定文件（客户端使用）
+// EncryptLicenseFileWithClientAES 使用客户端AES密钥加密授权文件
+func (s *LicenseService) EncryptLicenseFileWithClientAES(licenseFile LicenseFile, clientAESKey []byte) (*EncryptedFileResponse, error) {
+	// 1. 序列化license
+	jsonData, err := json.Marshal(licenseFile)
+	if err != nil {
+		return nil, errors.WrapError(err, 50002, "序列化授权文件失败")
+	}
+
+	// 2. 获取服务端公钥（用于混合加密）
+	_, publicKey, err := s.rsaService.GetActiveKeyPair()
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. 使用客户端AES密钥进行混合加密
+	encryptedContent, err := crypto.EncryptFileToBase64WithClientKey(publicKey, jsonData, clientAESKey)
+	if err != nil {
+		return nil, errors.WrapError(err, 50002, "混合加密授权文件失败")
+	}
+
+	return &EncryptedFileResponse{
+		EncryptedContent: encryptedContent,
+		FileType:         "license",
+	}, nil
+}
+
+// EncryptBindFile 加密绑定文件（客户端使用，使用基于机器ID的AES密钥）
 func (s *LicenseService) EncryptBindFile(bindFile BindFile) (*EncryptedFileResponse, error) {
 	_, publicKey, err := s.rsaService.GetActiveKeyPair()
 	if err != nil {
@@ -259,9 +383,13 @@ func (s *LicenseService) EncryptBindFile(bindFile BindFile) (*EncryptedFileRespo
 		return nil, errors.WrapError(err, 50002, "序列化绑定文件失败")
 	}
 
-	encryptedContent, err := crypto.EncryptFileToBase64(publicKey, jsonData)
+	// 生成基于机器ID的客户端AES密钥
+	clientAESKey := crypto.GenerateClientAESKey(bindFile.MachineID)
+
+	// 使用客户端AES密钥进行混合加密
+	encryptedContent, err := crypto.EncryptFileToBase64WithClientKey(publicKey, jsonData, clientAESKey)
 	if err != nil {
-		return nil, errors.WrapError(err, 50002, "加密绑定文件失败")
+		return nil, errors.WrapError(err, 50002, "混合加密绑定文件失败")
 	}
 
 	return &EncryptedFileResponse{
@@ -270,7 +398,7 @@ func (s *LicenseService) EncryptBindFile(bindFile BindFile) (*EncryptedFileRespo
 	}, nil
 }
 
-// EncryptUnbindFile 加密解绑文件（客户端使用）
+// EncryptUnbindFile 加密解绑文件（客户端使用，使用基于机器ID的AES密钥）
 func (s *LicenseService) EncryptUnbindFile(unbindFile UnbindFile) (*EncryptedFileResponse, error) {
 	_, publicKey, err := s.rsaService.GetActiveKeyPair()
 	if err != nil {
@@ -282,9 +410,13 @@ func (s *LicenseService) EncryptUnbindFile(unbindFile UnbindFile) (*EncryptedFil
 		return nil, errors.WrapError(err, 50002, "序列化解绑文件失败")
 	}
 
-	encryptedContent, err := crypto.EncryptFileToBase64(publicKey, jsonData)
+	// 生成基于机器ID的客户端AES密钥
+	clientAESKey := crypto.GenerateClientAESKey(unbindFile.MachineID)
+
+	// 使用客户端AES密钥进行混合加密
+	encryptedContent, err := crypto.EncryptFileToBase64WithClientKey(publicKey, jsonData, clientAESKey)
 	if err != nil {
-		return nil, errors.WrapError(err, 50002, "加密解绑文件失败")
+		return nil, errors.WrapError(err, 50002, "混合加密解绑文件失败")
 	}
 
 	return &EncryptedFileResponse{
@@ -757,8 +889,11 @@ func (s *LicenseService) RegenerateLicenseFile(licenseID uint, userID interface{
 		Signature:   signature,
 	}
 
-	// 加密license文件
-	encryptedLicenseFile, err := s.EncryptLicenseFile(licenseFile)
+	// 生成客户端AES密钥（基于机器ID）
+	clientAESKey := crypto.GenerateClientAESKey(license.MachineID)
+
+	// 使用客户端AES密钥加密license文件
+	encryptedLicenseFile, err := s.EncryptLicenseFileWithClientAES(licenseFile, clientAESKey)
 	if err != nil {
 		return nil, "", err
 	}

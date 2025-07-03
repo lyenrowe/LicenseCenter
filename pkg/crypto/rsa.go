@@ -296,3 +296,60 @@ func DecryptFileFromBase64(privateKey *rsa.PrivateKey, base64Data string) ([]byt
 
 	return HybridDecrypt(privateKey, encryptedData)
 }
+
+// AESGCMEncrypt 使用AES-GCM加密数据（导出版本）
+func AESGCMEncrypt(data []byte, key []byte) ([]byte, error) {
+	return aesGCMEncrypt(data, key)
+}
+
+// AESGCMDecrypt 使用AES-GCM解密数据（导出版本）
+func AESGCMDecrypt(encryptedData []byte, key []byte) ([]byte, error) {
+	return aesGCMDecrypt(encryptedData, key)
+}
+
+// HybridEncryptWithClientKey 混合加密：使用客户端固定AES密钥
+func HybridEncryptWithClientKey(publicKey *rsa.PublicKey, data []byte, clientAESKey []byte) ([]byte, error) {
+	// 1. 使用客户端提供的AES密钥加密数据
+	encryptedData, err := aesGCMEncrypt(data, clientAESKey)
+	if err != nil {
+		return nil, fmt.Errorf("AES加密数据失败: %w", err)
+	}
+
+	// 2. 使用RSA-OAEP加密客户端AES密钥
+	encryptedAESKey, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, publicKey, clientAESKey, nil)
+	if err != nil {
+		return nil, fmt.Errorf("RSA加密AES密钥失败: %w", err)
+	}
+
+	// 3. 组合数据：[4字节AES密钥长度][RSA加密的AES密钥][AES加密的数据]
+	keyLen := len(encryptedAESKey)
+	result := make([]byte, 4+keyLen+len(encryptedData))
+
+	// 写入AES密钥长度（大端序）
+	binary.BigEndian.PutUint32(result[0:4], uint32(keyLen))
+
+	// 写入加密的AES密钥
+	copy(result[4:4+keyLen], encryptedAESKey)
+
+	// 写入加密的数据
+	copy(result[4+keyLen:], encryptedData)
+
+	return result, nil
+}
+
+// EncryptFileToBase64WithClientKey 使用客户端AES密钥的混合加密并转换为Base64
+func EncryptFileToBase64WithClientKey(publicKey *rsa.PublicKey, jsonData []byte, clientAESKey []byte) (string, error) {
+	encryptedData, err := HybridEncryptWithClientKey(publicKey, jsonData, clientAESKey)
+	if err != nil {
+		return "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(encryptedData), nil
+}
+
+// GenerateClientAESKey 基于机器ID生成客户端固定AES密钥
+func GenerateClientAESKey(machineID string) []byte {
+	data := "LicenseCenter:AES:" + machineID
+	hash := sha256.Sum256([]byte(data))
+	return hash[:] // 返回32字节作为AES-256密钥
+}

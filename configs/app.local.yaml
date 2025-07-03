@@ -1,7 +1,7 @@
 server:
   host: "0.0.0.0"
   port: 8080
-  mode: "debug" # debug, release, test
+  mode: "release" # debug, release, test
   
 database:
   driver: "sqlite" # sqlite, mysql, postgres
@@ -15,21 +15,26 @@ security:
   session_timeout: 3600 # seconds (1 hour for customer)
   admin_session_timeout: 1800 # seconds (30 minutes for admin)
   rsa_key_size: 2048
+  force_totp: true
 
 captcha:
   enabled: true
-  site_key: "your-hcaptcha-site-key"
-  secret_key: "your-hcaptcha-secret-key"
+  site_key: "328272de-dd1c-496a-80ac-56e295ec7ce6"     # 替换为你的站点密钥
+  secret_key: "ES_5fc23db60e6b481a9364b65ef95a1646" # 替换为你的私钥
 
 logging:
-  # 生产环境建议使用info级别，减少日志输出提高性能
-  level: "info" # debug, info, warn, error
+  # 日志级别控制哪些级别的日志会被记录，级别从低到高：
+  # - debug: 记录所有日志（debug、info、warn、error、fatal）
+  # - info:  记录info及以上级别（info、warn、error、fatal）
+  # - warn:  记录warn及以上级别（warn、error、fatal）
+  # - error: 记录error及以上级别（error、fatal）
+  level: "debug" # debug, info, warn, error
   file: "./logs/app.log"
   max_size: 100 # MB
   max_backups: 3
   max_age: 30 # days
   gin_mode: "release" # gin框架模式: debug, release, test
-  enable_http_log: false # 生产环境可以关闭HTTP请求日志以提高性能
+  enable_http_log: true # 是否启用HTTP请求日志
 
 system:
   max_bind_files_per_request: 10

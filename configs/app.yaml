@@ -19,8 +19,8 @@ security:
 
 captcha:
   enabled: true
-  site_key: "your-hcaptcha-site-key"
-  secret_key: "your-hcaptcha-secret-key"
+  site_key: "328272de-dd1c-496a-80ac-56e295ec7ce6"     # 替换为你的站点密钥
+  secret_key: "ES_5fc23db60e6b481a9364b65ef95a1646" # 替换为你的私钥
 
 logging:
   # 日志级别控制哪些级别的日志会被记录，级别从低到高：

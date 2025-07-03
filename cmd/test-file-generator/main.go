@@ -217,15 +217,16 @@ func generateUnbindFile() {
 		return
 	}
 
-	// 使用license中的私钥生成解绑证明
-	unbindProof, err := generateUnbindProof(licenseData.LicenseKey, licenseData.MachineID, licenseData.UnbindPrivateKey)
+	// 创建解绑文件
+	now := time.Now().UTC()
+
+	// 使用license中的私钥生成解绑证明（传入解绑时间和hostname）
+	unbindProof, err := generateUnbindProof(licenseData.LicenseKey, licenseData.MachineID, licenseData.Hostname, licenseData.UnbindPrivateKey, now)
 	if err != nil {
 		fmt.Printf("❌ 生成解绑证明失败: %v\n", err)
 		return
 	}
 
-	// 创建解绑文件
-	now := time.Now().UTC()
 	unbindFile := UnbindFile{
 		LicenseKey: licenseData.LicenseKey,
 		MachineID:  licenseData.MachineID,
@@ -492,15 +493,20 @@ func loadPrivateKeyFromDatabase() (*rsa.PrivateKey, error) {
 }
 
 // generateUnbindProof 生成解绑证明
-func generateUnbindProof(licenseKey, machineID, privateKeyPEM string) (string, error) {
+func generateUnbindProof(licenseKey, machineID, hostname, privateKeyPEM string, unbindTime time.Time) (string, error) {
 	// 解析私钥
 	privateKey, err := crypto.LoadPrivateKeyFromPEM(privateKeyPEM)
 	if err != nil {
 		return "", fmt.Errorf("解析私钥失败: %v", err)
 	}
 
-	// 构造待签名的数据
-	unbindData := fmt.Sprintf("%s:%s:%d", licenseKey, machineID, time.Now().Unix())
+	// 构造待签名的数据（必须与服务端验证时的格式完全一致）
+	// 服务端验证格式：licenseKey:machineID:unbindTime(RFC3339):hostname
+	unbindData := fmt.Sprintf("%s:%s:%s:%s",
+		licenseKey,
+		machineID,
+		unbindTime.Format(time.RFC3339),
+		hostname)
 
 	// 使用私钥签名
 	signature, err := crypto.SignData(privateKey, []byte(unbindData))

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -68,8 +69,8 @@ func (h *CustomerHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// 验证授权码
-	authorization, err := h.authService.ValidateAuthorizationCode(req.AuthorizationCode)
+	// 验证授权码（压缩首尾空格）
+	authorization, err := h.authService.ValidateAuthorizationCode(strings.TrimSpace(req.AuthorizationCode))
 	if err != nil {
 		if appErr, ok := err.(*errors.AppError); ok {
 			c.JSON(appErr.HTTPStatus(), gin.H{

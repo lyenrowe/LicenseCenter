@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -41,6 +42,11 @@ func (h *AuthorizationHandler) CreateAuthorization(c *gin.Context) {
 			"code":  40000,
 		})
 		return
+	}
+
+	// 压缩授权码的首尾空格
+	if req.AuthorizationCode != "" {
+		req.AuthorizationCode = strings.TrimSpace(req.AuthorizationCode)
 	}
 
 	auth, err := h.authService.CreateAuthorization(&req)

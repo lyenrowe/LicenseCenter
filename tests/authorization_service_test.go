@@ -254,6 +254,33 @@ func (suite *AuthorizationServiceTestSuite) TestValidateAuthorizationCode() {
 	assert.Error(suite.T(), err)
 }
 
+func (suite *AuthorizationServiceTestSuite) TestValidateAuthorizationCodeWithSpaces() {
+	// 先创建一个授权码
+	req := &services.CreateAuthorizationRequest{
+		CustomerName:      "测试客户",
+		AuthorizationCode: "TEST-SPACES-CODE",
+		MaxSeats:          5,
+	}
+	createdAuth, err := suite.authService.CreateAuthorization(req)
+	assert.NoError(suite.T(), err)
+
+	// 测试带空格的授权码验证
+	testCases := []string{
+		" TEST-SPACES-CODE ",           // 前后空格
+		"  TEST-SPACES-CODE  ",         // 多个空格
+		"\tTEST-SPACES-CODE\t",         // 制表符
+		"\nTEST-SPACES-CODE\n",         // 换行符
+		"  \t  TEST-SPACES-CODE  \t  ", // 混合空白字符
+	}
+
+	for _, testCode := range testCases {
+		auth, err := suite.authService.ValidateAuthorizationCode(testCode)
+		assert.NoError(suite.T(), err, "授权码 '%s' 应该验证成功", testCode)
+		assert.Equal(suite.T(), createdAuth.ID, auth.ID)
+		assert.Equal(suite.T(), createdAuth.AuthorizationCode, auth.AuthorizationCode)
+	}
+}
+
 func (suite *AuthorizationServiceTestSuite) TestListAuthorizations() {
 	// 创建多个授权码
 	for i := 0; i < 3; i++ {

@@ -208,7 +208,10 @@ func (s *AuthorizationService) ListAuthorizations(page, limit int, search string
 
 // ValidateAuthorizationCode 验证授权码是否有效
 func (s *AuthorizationService) ValidateAuthorizationCode(code string) (*models.Authorization, error) {
-	auth, err := s.GetAuthorizationByCode(code)
+	// 压缩首尾空格
+	trimmedCode := strings.TrimSpace(code)
+
+	auth, err := s.GetAuthorizationByCode(trimmedCode)
 	if err != nil {
 		return nil, err
 	}

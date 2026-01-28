@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard">
     <div class="header">
-      <h1>OCR2Doc 授权管理控制台</h1>
+      <h1>授权管理控制台</h1>
       <el-button type="danger" @click="handleLogout">注销登录</el-button>
     </div>
     

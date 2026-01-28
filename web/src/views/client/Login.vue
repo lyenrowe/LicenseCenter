@@ -2,7 +2,7 @@
   <div class="login-container">
     <div class="login-card">
       <div class="login-header">
-        <h1>OCR2Doc 授权管理系统</h1>
+        <h1>授权管理系统</h1>
         <p>客户端登录</p>
       </div>
       

@@ -1,6 +1,6 @@
-# OCR2Doc 离线授权管理系统 - Web界面
+# 离线授权管理系统 - Web界面
 
-基于 Vue.js 3 + Element Plus 构建的现代化管理界面，为 OCR2Doc 离线授权系统提供完整的Web管理功能。
+基于 Vue.js 3 + Element Plus 构建的现代化管理界面，为 离线授权系统提供完整的Web管理功能。
 
 ## 🚀 技术栈
 

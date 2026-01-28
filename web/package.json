@@ -1,7 +1,7 @@
 {
   "name": "license-center-web",
   "version": "1.0.0",
-  "description": "OCR2Doc 离线授权管理系统 Web 界面",
+  "description": "离线授权管理系统 Web 界面",
   "private": true,
   "scripts": {
     "dev": "vite",

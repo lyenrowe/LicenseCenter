@@ -1,4 +1,4 @@
-# LicenseCenter - OCR2Doc 离线授权管理系统
+# LicenseCenter - 离线授权管理系统
 
 基于 Golang + Gin + GORM 构建的完整离线授权管理系统，支持授权码管理、设备激活、授权转移等功能。
 
